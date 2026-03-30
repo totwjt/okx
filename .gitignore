@@ -32,3 +32,6 @@ venv/
 *.swp
 *.swo
 data/
+ft_userdata/
+user_data/
+freqtrade_env/

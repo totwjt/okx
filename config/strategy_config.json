@@ -1,0 +1,20 @@
+{
+  "strategy": "VolumeRatioStrategy",
+  "strategy_params": {
+    "buy_volume_ratio_threshold": 0.7,
+    "sell_volume_ratio_threshold": 1.5,
+    "volume_ma_window": 20,
+    "stoploss": -0.03,
+    "timeframe": "5m"
+  },
+  "backtest": {
+    "timerange": "20250101-",
+    "stake_amount": 100,
+    "enable_protections": true
+  },
+  "hyperopt": {
+    "epochs": 100,
+    "spaces": ["buy", "sell"],
+    "loss": "Sharpe3"
+  }
+}

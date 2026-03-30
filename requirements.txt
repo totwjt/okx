@@ -1,0 +1,12 @@
+freqtrade
+python-okx
+ccxt
+vectorbt
+pandas
+pandas-ta
+aiohttp
+python-dotenv
+talib
+technical
+qtpylib
+requests

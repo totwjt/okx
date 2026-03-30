@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 from dotenv import load_dotenv
+from okx import MarketData
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -59,16 +60,15 @@ class OKXDataFetcher:
         }
 
         try:
-            import requests
-            url = f"{cls.BASE_URL}{cls.HISTORY_CANDLES_URL}"
-            response = requests.get(url, params=params, timeout=30)
-            data = response.json()
+            flag = "0" if cls.OKX_USE_SANDBOX else "1"
+            market = MarketData.MarketAPI(cls.OKX_API_KEY, cls.OKX_SECRET_KEY, cls.OKX_PASSPHRASE, flag=flag)
+            result = market.get_history_candles(instId=symbol, bar=tf, limit=limit)
 
-            if data.get("code") != "0":
-                print(f"API Error: {data.get('msg')}")
+            if result.get("code") != "0":
+                print(f"API Error: {result.get('msg')}")
                 return pd.DataFrame()
 
-            candles = data.get("data", [])
+            candles = result.get("data", [])
             if not candles:
                 return pd.DataFrame()
 

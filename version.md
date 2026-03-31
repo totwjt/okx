@@ -1,4 +1,4 @@
-# 自动交易系统稳定版本组合（生产可用）
+# 自动交易系统版本说明
 
 ## 推荐安装方式：Docker
 
@@ -23,7 +23,7 @@ docker compose run --rm freqtrade new-config --config user_data/config.json
 
 # 6. 复制策略文件
 mkdir -p user_data/strategies
-cp ../AI-OuYi/strategies/volume_ratio_strategy.py user_data/strategies/
+cp ../AI-OuYi/strategies/auto_multi_ls_v2.py user_data/strategies/
 
 # 7. 启动 Bot
 docker compose up -d
@@ -64,22 +64,14 @@ docker compose logs -f
 
 ---
 
-## 策略参数
+## 当前主线策略
 
-### VolumeRatioStrategy（已优化）
-| 参数 | 值 | 单位 | 说明 |
-|------|-----|------|------|
-| buy_volume_ratio_threshold | 0.33 | 倍数 | 买入：量能 < 均量的 33% |
-| sell_volume_ratio_threshold | 2.37 | 倍数 | 卖出：量能 > 均量的 237% |
-| volume_ma_window | 5 | 根K线 | 均量窗口 = 5 × 5m = 25分钟 |
-| timeframe | 5m | 分钟 | K线周期 |
-| stoploss | -0.03 | 比例 | 止损 -3% |
+### MultiLsV2Strategy
 
-### 回测结果（394天）
-| 指标 | 值 |
-|------|-----|
-| 总交易数 | 1801 |
-| 胜率 | 28.7% |
-| 总收益 | -84.11% |
+当前仓库已收口到多空策略主线，优先维护：
 
-> 注：该策略在当前市场环境下表现为负收益，建议更换策略或调整思路。
+- `MultiLSStrategy`
+- `MultiLsV2Strategy`
+- `LongShortSwitchStrategy` 系列
+
+旧的 `VolumeRatio` / `EMARSI` 仅用于早期验证，现已不再保留为主线策略。

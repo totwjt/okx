@@ -1,61 +1,78 @@
-# OKX 超短线量化机器人
+# AI-OuYi
 
-## 项目结构
+## 项目定位
 
-```
-AI-OuYi/
-├── .opencode/              # OpenCode 项目配置（重要！）
-│   └── knowledge-base/    # 项目知识库
-│
-├── strategies/             # 策略源码
-├── backtest/              # 回测脚本
-├── freqtrade_bot/         # 实时机器人
-├── config/                # 本地配置
-├── user_data/             # 空的 Freqtrade 模板
-├── ft_userdata/           # Docker 数据（正在使用）
-├── requirements.txt       # Python 依赖
-└── .env                   # API 配置
-```
+这是一个以 `Freqtrade + OKX` 为核心的研究型量化仓库，当前更接近“策略实验平台”，而不是可直接实盘托管的成熟交易系统。
 
-## 技术栈
+## 当前事实来源
 
-- 主框架: Freqtrade
-- API: python-okx / CCXT
-- 数据: pandas, vectorbt
+- 运行中的 Docker 数据目录: `ft_userdata/user_data/`
+- 本地策略研发目录: `strategies/`
+- 本地实验脚本目录: `backtest/`
+- 自定义实时机器人原型: `freqtrade_bot/realtime_bot.py`
+- OpenCode 知识库: `.opencode/knowledge-base/`
+
+优先相信以下路径中的内容是否与彼此一致，而不是只相信单个说明文件：
+
+- `ft_userdata/user_data/config.json`
+- `ft_userdata/user_data/strategies/`
+- `strategies/`
+- `AI_CONTEXT.md`
 
 ## 运行环境
 
-### 方式1: Docker（推荐）
+### Docker（主环境）
 
-所有命令通过 Docker 执行：
-```bash
-# 回测
-docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s VolumeRatioStrategyV1
+`freqtrade` 容器是当前主要运行入口。默认挂载关系见：
 
-# 模拟盘
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s VolumeRatioStrategyV1 --dry-run
-```
+- `ft_userdata/docker-compose.yml`
 
-### 方式2: 本地（需先激活虚拟环境）
+常用命令：
 
 ```bash
-# 激活环境
-source venv/bin/activate
-
-# 回测
-freqtrade backtesting -c config/config.json -s VolumeRatioStrategy
-
-# 模拟盘
-freqtrade trade -c config/config.json -s VolumeRatioStrategy --dry-run
+docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker logs -f freqtrade
 ```
 
-## 项目知识库
+### 本地 Python（辅助环境）
 
-详细说明请查看：
-- `.opencode/knowledge-base/project.md` - 项目完整说明
-- `.opencode/knowledge-base/docker.md` - Docker 环境说明
+仅适合阅读脚本、做研究型回测或生成策略，不应默认假设本地环境和 Docker 环境完全一致。
 
-## 待验证
+## 目录说明
 
-- 实时交易
-- 模拟盘测试
+```text
+AI-OuYi/
+├── .opencode/                  # OpenCode 项目配置与知识库
+├── backtest/                   # 自定义回测脚本（OKX API / vectorbt）
+├── config/                     # 本地配置样例
+├── freqtrade_bot/              # 自定义实时机器人原型
+├── ft_userdata/                # Docker 实际使用的数据与配置
+├── strategies/                 # 本地策略源码、生成器、规范
+├── user_data/                  # Freqtrade 模板目录，非当前主运行目录
+├── AI_CONTEXT.md               # AI 快速接手上下文
+└── requirements.txt            # Python 依赖
+```
+
+## AI 协作规则
+
+- 不要默认 `user_data/` 是当前真实运行目录，当前主目录是 `ft_userdata/user_data/`。
+- 不要默认 `strategies/` 与 `ft_userdata/user_data/strategies/` 已自动同步。
+- 不要仅凭文档断言策略有效，优先核对最近的回测产物与配置。
+- 如果要修改策略逻辑，先说明会影响 `Freqtrade`、自定义回测脚本、Docker 副本中的哪一层。
+- 如果只做文档或 AI 说明优化，不要顺手改交易逻辑。
+
+## 当前状态
+
+- 仓库当前只保留多空策略主线，重点围绕 `MultiLS / MultiLsV2 / LongShortSwitch` 演进。
+- 早期单向验证型策略已清理，后续不再作为主线维护。
+- `freqtrade_bot/realtime_bot.py` 目前更像信号演示原型，不应视作生产交易执行引擎。
+
+## 建议的阅读顺序
+
+1. `AI_CONTEXT.md`
+2. `.opencode/knowledge-base/project.md`
+3. `.opencode/knowledge-base/ai-collaboration.md`
+4. `ft_userdata/docker-compose.yml`
+5. `ft_userdata/user_data/config.json`
+6. `strategies/README.md`

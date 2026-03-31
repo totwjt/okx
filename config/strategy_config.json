@@ -1,11 +1,12 @@
 {
-  "strategy": "VolumeRatioStrategy",
+  "strategy": "MultiLsV2Strategy",
   "strategy_params": {
-    "buy_volume_ratio_threshold": 0.7,
-    "sell_volume_ratio_threshold": 1.5,
-    "volume_ma_window": 20,
-    "stoploss": -0.03,
-    "timeframe": "5m"
+    "ma_period": 204,
+    "rsi_period": 18,
+    "rsi_oversold": 32.5,
+    "rsi_overbought": 65.0,
+    "stoploss": -0.05,
+    "timeframe": "15m"
   },
   "backtest": {
     "timerange": "20250101-",
@@ -15,6 +16,6 @@
   "hyperopt": {
     "epochs": 100,
     "spaces": ["buy", "sell"],
-    "loss": "Sharpe3"
+    "loss": "ShortTradeDurHyperOptLoss"
   }
 }

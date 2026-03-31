@@ -5,6 +5,7 @@
   },
   "instructions": [
     "~/.config/opencode/instructions.md",
-    ".opencode/knowledge-base/project.md"
+    ".opencode/knowledge-base/project.md",
+    ".opencode/knowledge-base/ai-collaboration.md"
   ]
 }

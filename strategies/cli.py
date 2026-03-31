@@ -35,6 +35,44 @@ PARAM_FACTOR_MAP = {
 }
 
 
+def get_config_path(spec: dict) -> str:
+    trading_mode = spec.get('trading_mode', 'spot')
+    config_path = "/freqtrade/user_data/config.json"
+    if trading_mode == 'futures':
+        futures_config = "/freqtrade/user_data/config_futures.json"
+        if Path(futures_config).exists():
+            config_path = futures_config
+    return config_path
+
+
+def ensure_generated_strategy(name: str, spec: dict) -> Path:
+    code = generate_strategy(name, spec)
+    output_file = GENERATED_DIR / f"{name}.py"
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(code)
+
+    strategy_file = STRATEGY_DIR / f"auto_{name}.py"
+    with open(strategy_file, 'w', encoding='utf-8') as f:
+        f.write(code)
+
+    return output_file
+
+
+def get_timeranges(spec: dict) -> dict:
+    optimization = spec.get('optimization', {})
+    return {
+        "train": spec.get('train_timerange') or optimization.get('timerange', "20250101-20250930"),
+        "validation": spec.get('validation_timerange', "20251001-20251130"),
+        "test": spec.get('test_timerange', "20251201-"),
+    }
+
+
+def run_backtest_phase(name: str, config_path: str, label: str, timerange: str):
+    print(f"\n[{label}] 回测")
+    print(f"  时间范围: {timerange}")
+    os.system(f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}")
+
+
 def generate_strategy_v2(name: str, spec: dict) -> str:
     class_name = ''.join(word.capitalize() for word in name.replace('-', ' ').replace('_', ' ').split()) + 'Strategy'
     
@@ -369,70 +407,58 @@ def cmd_generate(args):
     print(f"生成策略: {name}")
     
     spec = load_spec(name)
-    code = generate_strategy(name, spec)
-    
-    output_file = GENERATED_DIR / f"{name}.py"
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(code)
-    
-    strategy_file = STRATEGY_DIR / f"auto_{name}.py"
-    with open(strategy_file, 'w', encoding='utf-8') as f:
-        f.write(code)
+    output_file = ensure_generated_strategy(name, spec)
     
     print(f"  生成完成: {output_file}")
-    print(f"  复制到: {strategy_file}")
+    print(f"  复制到: {STRATEGY_DIR / f'auto_{name}.py'}")
     print(f"\n  当前仓库以 strategies/ 为单一策略源码目录，无需额外 docker cp 同步。")
 
 
 def cmd_backtest(args):
     name = args.name
-    timerange = args.timerange or "20250101-"
-    
-    strategy_file = GENERATED_DIR / f"{name}.py"
-    if not strategy_file.exists():
-        print(f"错误: 策略 {name} 尚未生成，请先运行 generate")
-        sys.exit(1)
-    
     spec = load_spec(name)
-    trading_mode = spec.get('trading_mode', 'spot')
-    
-    config_path = "/freqtrade/user_data/config.json"
-    if trading_mode == 'futures':
-        config_path = "/freqtrade/user_data/config_futures.json"
-        if not Path(config_path).exists():
-            config_path = "/freqtrade/user_data/config.json"
+    ensure_generated_strategy(name, spec)
+    timeranges = get_timeranges(spec)
+    phase = args.phase or "train"
+    timerange = args.timerange or timeranges[phase]
+    config_path = get_config_path(spec)
     
     print(f"运行回测: {name}")
-    print(f"  交易模式: {trading_mode}")
+    print(f"  阶段: {phase}")
     print(f"  时间范围: {timerange}")
     
     os.system(f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}")
 
 
+def cmd_validate(args):
+    name = args.name
+    spec = load_spec(name)
+    ensure_generated_strategy(name, spec)
+    config_path = get_config_path(spec)
+    timeranges = get_timeranges(spec)
+
+    print(f"运行分段验证: {name}")
+    print(f"  train: {timeranges['train']}")
+    print(f"  validation: {timeranges['validation']}")
+    print(f"  test: {timeranges['test']}")
+
+    for phase in ["train", "validation", "test"]:
+        run_backtest_phase(name, config_path, phase.upper(), timeranges[phase])
+
+
 def cmd_optimize(args):
     name = args.name
-    epochs = args.epochs or 200
-    timerange = args.timerange or "20250101-20251101"
-    
-    strategy_file = GENERATED_DIR / f"{name}.py"
-    if not strategy_file.exists():
-        print(f"错误: 策略 {name} 尚未生成，请先运行 generate")
-        sys.exit(1)
-    
     spec = load_spec(name)
+    ensure_generated_strategy(name, spec)
     opt_config = spec.get('optimization', {})
-    trading_mode = spec.get('trading_mode', 'spot')
-    
-    config_path = "/freqtrade/user_data/config.json"
-    if trading_mode == 'futures':
-        config_path = "/freqtrade/user_data/config_futures.json"
-        if not Path(config_path).exists():
-            config_path = "/freqtrade/user_data/config.json"
+    epochs = args.epochs or opt_config.get('epochs', 200)
+    timerange = args.timerange or spec.get('train_timerange') or opt_config.get('timerange', "20250101-20250930")
+    config_path = get_config_path(spec)
     
     print(f"运行参数优化: {name}")
     print(f"  迭代次数: {epochs}")
     print(f"  时间范围: {timerange}")
-    print(f"  交易模式: {trading_mode}")
+    print(f"  阶段: train")
     
     cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timerange} --epochs {epochs} -j 4"
     if opt_config.get('hyperopt_loss'):
@@ -451,28 +477,28 @@ def cmd_run(args):
     
     print(f"=== 运行完整流程: {name} ===\n")
     
-    print("[1/3] 生成策略...")
     spec = load_spec(name)
-    code = generate_strategy(name, spec)
-    output_file = GENERATED_DIR / f"{name}.py"
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(code)
+    print("[1/4] 生成策略...")
+    output_file = ensure_generated_strategy(name, spec)
     print(f"  完成: {output_file}\n")
     
     opt_config = spec.get('optimization', {})
     epochs = opt_config.get('epochs', 200)
-    timerange = opt_config.get('timerange', "20250101-20251101")
+    timeranges = get_timeranges(spec)
+    config_path = get_config_path(spec)
     
-    print(f"[2/3] 参数优化 (epochs={epochs})...")
-    cmd = f"freqtrade hyperopt -c /freqtrade/user_data/config.json -s {name} --timerange {timerange} --epochs {epochs} -j 4"
+    print(f"[2/4] 训练集参数优化 (epochs={epochs})...")
+    cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timeranges['train']} --epochs {epochs} -j 4"
     if opt_config.get('hyperopt_loss'):
         cmd += f" --hyperopt-loss {opt_config['hyperopt_loss']}"
     os.system(cmd)
     print()
     
-    test_timerange = spec.get('test_timerange', "20251101-")
-    print(f"[3/3] 回测验证...")
-    os.system(f"freqtrade backtesting -c /freqtrade/user_data/config.json -s {name} --timerange {test_timerange}")
+    print("[3/4] 验证集回测...")
+    run_backtest_phase(name, config_path, "VALIDATION", timeranges['validation'])
+    
+    print("\n[4/4] 测试集回测...")
+    run_backtest_phase(name, config_path, "TEST", timeranges['test'])
     
     print("\n=== 完成 ===")
 
@@ -554,6 +580,10 @@ def main():
     bt_parser = subparsers.add_parser("backtest", help="运行回测")
     bt_parser.add_argument("name", help="策略名称")
     bt_parser.add_argument("--timerange", "-t", help="时间范围")
+    bt_parser.add_argument("--phase", choices=["train", "validation", "test"], help="使用 YAML 中的阶段时间范围")
+    
+    validate_parser = subparsers.add_parser("validate", help="运行 train/validation/test 分段回测")
+    validate_parser.add_argument("name", help="策略名称")
     
     opt_parser = subparsers.add_parser("optimize", help="运行参数优化")
     opt_parser.add_argument("name", help="策略名称")
@@ -576,6 +606,8 @@ def main():
         cmd_generate(args)
     elif args.command == "backtest":
         cmd_backtest(args)
+    elif args.command == "validate":
+        cmd_validate(args)
     elif args.command == "optimize":
         cmd_optimize(args)
     elif args.command == "run":

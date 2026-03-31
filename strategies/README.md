@@ -40,14 +40,31 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py config multi
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py generate multi_ls_v2
 
 # 运行回测
-docker exec freqtrade python /freqtrade/user_data/strategies/cli.py backtest multi_ls_v2
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py backtest multi_ls_v2 --phase train
+
+# 跑完整的 train / validation / test 分段回测
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py validate multi_ls_v2
 
 # 参数优化
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py optimize multi_ls_v2 --epochs 200
 
-# 运行完整流程
+# 运行完整流程（生成 -> train hyperopt -> validation -> test）
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls_v2
 ```
+
+## 回测规范
+
+当前主线采用三段式验证：
+
+1. `train_timerange`: 训练集，用于参数优化
+2. `validation_timerange`: 验证集，用于筛选参数是否稳定
+3. `test_timerange`: 测试集，用于最终观察样本外表现
+
+推荐原则：
+
+- 不要直接用测试集调参
+- 每次调参先看 validation，再看 test
+- `run` 命令默认执行完整三段流程
 
 ## 参数优先级
 
@@ -145,11 +162,13 @@ derived_indicators:
 # 优化配置
 optimization:
   epochs: 200
-  timerange: "20250101-20251101"
+  timerange: "20250101-20250930"
   hyperopt_loss: "ShortTradeDurHyperOptLoss"
 
-# 测试时间范围
-test_timerange: "20251101-"
+# 三段式时间范围
+train_timerange: "20250101-20250930"
+validation_timerange: "20251001-20251130"
+test_timerange: "20251201-"
 
 ```
 
@@ -181,7 +200,8 @@ test_timerange: "20251101-"
 
 | 模式 | 命令 | 配置 |
 |------|------|------|
-| 回测 | `cli.py backtest` | 历史数据验证 |
+| 单阶段回测 | `cli.py backtest --phase train|validation|test` | 分段验证 |
+| 全部分段回测 | `cli.py validate` | train / validation / test |
 | 模拟盘 | `freqtrade trade --dry-run` | dry_run: true |
 | 实盘 | `freqtrade trade` | dry_run: false |
 

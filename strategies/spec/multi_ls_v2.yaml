@@ -82,9 +82,11 @@ name: Multi-LS V2
 optimization:
   epochs: 200
   hyperopt_loss: ShortTradeDurHyperOptLoss
-  timerange: 20250101-20251101
+  timerange: 20250101-20250930
 stoploss: -0.05
-test_timerange: 20251101-
+train_timerange: 20250101-20250930
+validation_timerange: 20251001-20251130
+test_timerange: 20251201-
 timeframe: 15m
 trading_mode: futures
 trailing_stop: true

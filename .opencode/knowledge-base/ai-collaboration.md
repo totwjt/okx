@@ -15,15 +15,13 @@
 
 1. `ft_userdata/docker-compose.yml`
 2. `ft_userdata/user_data/config.json`
-3. `ft_userdata/user_data/strategies/`
+3. `strategies/`
 4. 最近的 `ft_userdata/user_data/backtest_results/`
-5. 本地 `strategies/`
-6. 说明性文档
+5. 说明性文档
 
 ## 目录角色
 
-- `strategies/`: 本地研发与生成逻辑
-- `ft_userdata/user_data/strategies/`: Docker 实际执行副本
+- `strategies/`: 本地研发与 Docker 实际执行共用目录
 - `backtest/`: 研究型验证脚本，不等于 Freqtrade 官方回测结果
 - `freqtrade_bot/`: 原型级实时机器人，不是成熟 OMS/EMS
 
@@ -31,7 +29,7 @@
 
 - 如果任务是分析或审计，先核对目录和类名，再下判断。
 - 如果任务是改文档，只更新文档，不顺手改策略逻辑。
-- 如果任务是改策略，必须明确会不会同步影响 Docker 副本。
+- 如果任务是改策略，直接修改 `strategies/`，它会同步影响 Docker 运行态。
 - 如果发现文档和代码冲突，先保留冲突事实，再修正文档，不要掩盖。
 
 ## 专业交易语境提醒
@@ -49,5 +47,5 @@ OKX 永续合约策略不能只看方向信号，至少还要考虑：
 
 1. 识别本次任务是否允许改功能代码
 2. 读取当前运行配置与最近回测结果
-3. 核对本地策略与容器策略是否一致
+3. 核对 Docker 是否仍在挂载本地 `strategies/`
 4. 再提出建议或修改

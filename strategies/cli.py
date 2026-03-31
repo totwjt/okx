@@ -373,8 +373,7 @@ def cmd_generate(args):
     
     print(f"  生成完成: {output_file}")
     print(f"  复制到: {strategy_file}")
-    print(f"\n  同步到本地:")
-    print(f"    docker cp freqtrade:{output_file} /Users/wangjiangtao/Documents/AI/AI-OuYi/strategies/generated/")
+    print(f"\n  当前仓库以 strategies/ 为单一策略源码目录，无需额外 docker cp 同步。")
 
 
 def cmd_backtest(args):

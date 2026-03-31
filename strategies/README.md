@@ -183,9 +183,11 @@ config_overrides:
 3. 使用 CLI 生成代码
 4. 回测验证效果
 
-## 同步到本地 (可选)
+## 目录同步
 
-生成策略后，如需备份到本地：
-```bash
-docker cp freqtrade:/freqtrade/user_data/strategies/generated/<策略名>.py /Users/wangjiangtao/Documents/AI/AI-OuYi/strategies/generated/
-```
+当前采用 Docker bind mount：
+
+- 本地 `strategies/`
+- 容器 `/freqtrade/user_data/strategies/`
+
+因此策略开发、生成和修改默认都直接发生在本地 `strategies/`，无需额外执行 `docker cp`。

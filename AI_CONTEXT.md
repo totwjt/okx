@@ -8,14 +8,14 @@
 
 1. 当前真实运行目录是不是 `ft_userdata/user_data/`
 2. 容器 `freqtrade` 是否仍以 `MultiLsV2Strategy` 作为默认启动策略
-3. 本地 `strategies/` 与 Docker 内策略目录是否已经同步
+3. Docker 是否仍把本地 `strategies/` 直接挂载到容器策略目录
 4. 最近回测结果对应的是哪一个策略类名
 5. 这次任务是否允许修改功能代码，还是只允许修改文档/配置/AI 文件
 
 ## 当前仓库状态
 
 - `ft_userdata/docker-compose.yml` 默认通过 `trade` 启动 `MultiLsV2Strategy`
-- 本地 `strategies/` 当前只保留 `MultiLsV2Strategy` 主线
+- 本地 `strategies/` 是唯一策略源码目录，并直接挂载进 Docker
 - 历史回测里可能还会看到 `MultiLSStrategy`、`LongShortSwitchStrategy` 等旧名字，它们不再是当前主线
 - `user_data/` 更像模板目录，不是主要运行目录
 
@@ -42,6 +42,7 @@ python3 backtest/multi_trend_backtest.py --symbol BTC-USDT --timeframe 15m
 - Freqtrade 策略、vectorbt 回测、自定义 WebSocket 机器人不是同一套执行层。
 - 文档里出现的策略名与实际类名可能不完全一致，执行前必须核对。
 - 研究结果不等于可上线执行策略，尤其是 OKX 永续合约场景。
+- 容器内 `/freqtrade/user_data/strategies/` 来自仓库根目录 `strategies/` 挂载，不应再单独维护第二份副本。
 
 ## 对 AI 的工作建议
 

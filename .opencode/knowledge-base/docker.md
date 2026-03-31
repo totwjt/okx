@@ -11,6 +11,7 @@
 | 容器名称 | `freqtrade` |
 | 运行目录 | `/freqtrade/` |
 | 挂载源 | `ft_userdata/user_data` -> `/freqtrade/user_data` |
+| 策略源码挂载 | `strategies` -> `/freqtrade/user_data/strategies` |
 | 用户数据目录 | `/freqtrade/user_data/` |
 | 策略目录 | `/freqtrade/user_data/strategies/` |
 | 配置文件 | `/freqtrade/user_data/config.json` |
@@ -27,13 +28,13 @@ docker exec -it freqtrade /bin/bash
 
 ```bash
 # 回测
-docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s VolumeRatioStrategyV1
+docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
 
 # 模拟盘
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s VolumeRatioStrategyV1 --dry-run
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy --dry-run
 
 # 实盘（谨慎！）
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s VolumeRatioStrategyV1
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
 ```
 
 ### 查看日志
@@ -46,14 +47,11 @@ docker logs -f freqtrade
 docker logs --tail 100 freqtrade
 ```
 
-### 文件同步
+### 策略开发
 
 ```bash
-# 本地 -> Docker
-docker cp strategies/volume_ratio_strategy.py freqtrade:/freqtrade/user_data/strategies/
-
-# Docker -> 本地
-docker cp freqtrade:/freqtrade/user_data/strategies/volume_ratio_strategy.py strategies/
+# 直接在仓库根目录修改 strategies/
+# 容器会通过 bind mount 直接读取这些文件
 ```
 
 ### 数据下载
@@ -84,6 +82,7 @@ docker-compose restart
 2. **API 密钥**在 `.env` 文件中，Docker 启动时自动加载
 3. **数据持久化** - `user_data/` 目录挂载到容器，容器删除后数据保留
 4. **日志大小** - 定期清理: `docker system prune`
+5. **策略单一事实来源** - 只维护仓库根目录 `strategies/`
 
 ---
 *最后更新: 2026-03-31*

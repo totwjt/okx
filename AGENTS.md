@@ -7,7 +7,7 @@
 ## 当前事实来源
 
 - 运行中的 Docker 数据目录: `ft_userdata/user_data/`
-- 本地策略研发目录: `strategies/`
+- 唯一策略源码目录: `strategies/`
 - 本地实验脚本目录: `backtest/`
 - 自定义实时机器人原型: `freqtrade_bot/realtime_bot.py`
 - OpenCode 知识库: `.opencode/knowledge-base/`
@@ -15,7 +15,6 @@
 优先相信以下路径中的内容是否与彼此一致，而不是只相信单个说明文件：
 
 - `ft_userdata/user_data/config.json`
-- `ft_userdata/user_data/strategies/`
 - `strategies/`
 - `AI_CONTEXT.md`
 
@@ -43,6 +42,15 @@ docker logs -f freqtrade
 
 仅适合阅读脚本、做研究型回测或生成策略，不应默认假设本地环境和 Docker 环境完全一致。
 
+### 策略目录挂载关系
+
+Docker 直接挂载：
+
+- 本地 `strategies/`
+- 到容器 `/freqtrade/user_data/strategies/`
+
+这意味着修改本地 `strategies/` 后，无需再手动复制到 Docker。
+
 ## 目录说明
 
 ```text
@@ -61,7 +69,7 @@ AI-OuYi/
 ## AI 协作规则
 
 - 不要默认 `user_data/` 是当前真实运行目录，当前主目录是 `ft_userdata/user_data/`。
-- 不要默认 `strategies/` 与 `ft_userdata/user_data/strategies/` 已自动同步。
+- 不要再维护第二份 Docker 策略副本，`strategies/` 就是唯一策略源码目录。
 - 不要仅凭文档断言策略有效，优先核对最近的回测产物与配置。
 - 如果要修改策略逻辑，先说明会影响 `Freqtrade`、自定义回测脚本、Docker 副本中的哪一层。
 - 如果只做文档或 AI 说明优化，不要顺手改交易逻辑。

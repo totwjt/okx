@@ -36,7 +36,7 @@ AI-OuYi/
 ## 目录职责
 
 - `ft_userdata/user_data/`: Docker 当前实际使用的数据、配置、策略和回测结果
-- `strategies/`: 本地研发目录，含手写策略、自动生成策略、YAML 规范、CLI 生成器
+- `strategies/`: 唯一策略源码目录，含自动生成策略、YAML 规范、CLI 生成器，并直接挂载到 Docker
 - `backtest/`: 自定义研究脚本，适合快速验证想法
 - `freqtrade_bot/`: 自定义实时机器人原型
 - `user_data/`: Freqtrade 模板目录，不是当前主运行目录
@@ -56,7 +56,7 @@ AI-OuYi/
 
 - `ft_userdata/docker-compose.yml`
 - `ft_userdata/user_data/config.json`
-- `ft_userdata/user_data/strategies/`
+- `strategies/`
 
 Docker 常用命令：
 
@@ -65,6 +65,13 @@ docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json 
 docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s VolumeRatioStrategy
 docker logs -f freqtrade
 ```
+
+策略目录挂载关系：
+
+- 本地: `strategies/`
+- 容器: `/freqtrade/user_data/strategies/`
+
+因此策略开发默认只在本地 `strategies/` 进行，不再单独维护 `ft_userdata/user_data/strategies/` 副本。
 
 ### 本地 Python 是辅助环境
 
@@ -98,7 +105,7 @@ docker logs -f freqtrade
 2. 核对 `ft_userdata/docker-compose.yml`
 3. 核对 `ft_userdata/user_data/config.json`
 4. 检查最新回测产物
-5. 再判断是否需要修改 `strategies/` 或 Docker 副本
+5. 只修改 `strategies/`，不要再同时改一份 Docker 副本
 
 ## OpenCode 加载说明
 

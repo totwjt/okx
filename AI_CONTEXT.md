@@ -72,3 +72,9 @@ docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json 
 | 量比策略 | -99.85% | -84.11% | ❌ 严重亏损 |
 
 **EMA+RSI 略优于量比策略**，但两者都亏损，不建议实盘。
+
+## 项目知识库
+
+详细说明请查看：
+- `.opencode/knowledge-base/project.md` - 项目完整说明
+- `.opencode/knowledge-base/docker.md` - Docker 环境说明

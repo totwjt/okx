@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "knowledgeBase": {
+    "path": ".opencode/knowledge-base"
+  },
+  "instructions": [
+    "~/.config/opencode/instructions.md",
+    ".opencode/knowledge-base/project.md"
+  ]
+}

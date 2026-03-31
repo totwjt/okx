@@ -78,17 +78,15 @@ docker logs -f freqtrade
 
 ## 当前研究方向
 
-仓库里大致有三条策略线：
+仓库当前只保留一条策略主线：
 
-1. `MultiLS`
-2. `MultiLsV2`
-3. `LongShortSwitch` 系列多空切换趋势策略
+1. `MultiLsV2Strategy`
 
-当前仓库已经明确收口到多空策略主线，不再维护早期单向验证型策略。
+`MultiLS`、`LongShortSwitch`、`TrendFollowing` 等文件可视为历史迭代痕迹，不再作为当前主线维护。
 
 ## 当前已知状态
 
-- 最近回测产物已经开始出现 `MultiLsV2Strategy` 等新策略
+- 当前默认策略为 `MultiLsV2Strategy`
 - Docker 默认启动策略已切到多空主线
 - 文档、策略类名、Docker 副本之间存在一定漂移，需要核对后再行动
 

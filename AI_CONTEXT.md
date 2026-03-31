@@ -15,8 +15,8 @@
 ## 当前仓库状态
 
 - `ft_userdata/docker-compose.yml` 默认通过 `trade` 启动 `MultiLsV2Strategy`
-- 本地 `strategies/` 当前聚焦多空切换方向
-- 最近回测产物已经包含 `MultiLSStrategy`、`MultiLsStrategy`、`MultiLsV2Strategy`
+- 本地 `strategies/` 当前只保留 `MultiLsV2Strategy` 主线
+- 历史回测里可能还会看到 `MultiLSStrategy`、`LongShortSwitchStrategy` 等旧名字，它们不再是当前主线
 - `user_data/` 更像模板目录，不是主要运行目录
 
 ## 运行入口

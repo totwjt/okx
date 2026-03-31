@@ -27,6 +27,10 @@
 
 - `ft_userdata/docker-compose.yml`
 
+当前唯一主线策略：
+
+- `MultiLsV2Strategy`
+
 常用命令：
 
 ```bash
@@ -64,8 +68,8 @@ AI-OuYi/
 
 ## 当前状态
 
-- 仓库当前只保留多空策略主线，重点围绕 `MultiLS / MultiLsV2 / LongShortSwitch` 演进。
-- 早期单向验证型策略已清理，后续不再作为主线维护。
+- 仓库当前只保留一个多空主线策略: `MultiLsV2Strategy`。
+- `MultiLS`、`LongShortSwitch`、`TrendFollowing` 等历史变体已退出主线，不再继续演进。
 - `freqtrade_bot/realtime_bot.py` 目前更像信号演示原型，不应视作生产交易执行引擎。
 
 ## 建议的阅读顺序

@@ -68,10 +68,8 @@ docker compose logs -f
 
 ### MultiLsV2Strategy
 
-当前仓库已收口到多空策略主线，优先维护：
+当前仓库已收口到唯一主线策略：
 
-- `MultiLSStrategy`
 - `MultiLsV2Strategy`
-- `LongShortSwitchStrategy` 系列
 
-旧的 `VolumeRatio` / `EMARSI` 仅用于早期验证，现已不再保留为主线策略。
+旧的 `VolumeRatio` / `EMARSI` 以及 `MultiLS` / `LongShortSwitch` / `TrendFollowing` 等历史变体，现已不再保留为主线策略。

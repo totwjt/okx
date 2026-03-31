@@ -1,0 +1,98 @@
+can_short: true
+config_overrides:
+  ma_period: 250.0
+  rsi_overbought: 65.0
+  rsi_oversold: 32.5
+  rsi_period: 18
+derived_indicators:
+- formula: dataframe['ma'].diff(3)
+  name: ma_slope
+description: 多空切换策略 V2 - 支持因子配置的参数化策略
+entry_conditions:
+  long: '(dataframe[''close''] > dataframe[''ma'']) &
+
+    (dataframe[''ma_slope''] > 0) &
+
+    (dataframe[''rsi''] < rsi_oversold)
+
+    '
+  short: '(dataframe[''close''] < dataframe[''ma'']) &
+
+    (dataframe[''ma_slope''] < 0) &
+
+    (dataframe[''rsi''] > rsi_overbought)
+
+    '
+exit_conditions:
+  long: '(dataframe[''rsi''] > rsi_overbought) |
+
+    (dataframe[''close''] < dataframe[''ma''])
+
+    '
+  short: '(dataframe[''rsi''] < rsi_oversold) |
+
+    (dataframe[''close''] > dataframe[''ma''])
+
+    '
+factors:
+  bb:
+    enabled: false
+    period: 20
+    std: 2.0
+    std_range:
+    - 1.5
+    - 3.0
+  ma:
+    enabled: true
+    period: 200
+    range:
+    - 100
+    - 300
+    space: buy
+    type: SMA
+  macd:
+    enabled: false
+    fast: 12
+    signal: 9
+    slow: 26
+  rsi:
+    enabled: true
+    period: 14
+    range:
+    - 7
+    - 21
+    space: buy
+  rsi_overbought:
+    enabled: true
+    range:
+    - 65
+    - 80
+    space: sell
+    value: 70
+  rsi_oversold:
+    enabled: true
+    range:
+    - 20
+    - 35
+    space: buy
+    value: 30
+  volume:
+    enabled: false
+    ma_period: 20
+    ratio_threshold: 1.5
+margin_mode: isolated
+minimal_roi:
+  '0': 0.02
+name: Multi-LS V2
+optimization:
+  epochs: 200
+  hyperopt_loss: ShortTradeDurHyperOptLoss
+  timerange: 20250101-20251101
+stoploss: -0.05
+test_timerange: 20251101-
+timeframe: 15m
+trading_mode: futures
+trailing_stop: true
+trailing_stop_positive: 0.02
+trailing_stop_positive_offset: 0.025
+version: '2.0'

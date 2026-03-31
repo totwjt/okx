@@ -66,6 +66,29 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 - 每次调参先看 validation，再看 test
 - `run` 命令默认执行完整三段流程
 
+## 成本模型
+
+当前策略规范会显式记录：
+
+- `fee`
+- `slippage_bps`
+- `funding_rate_included`
+
+当前 CLI 已接入：
+
+- `fee`: 会自动传给 `freqtrade backtesting` / `freqtrade hyperopt`
+
+当前仍未完整自动接入：
+
+- `slippage_bps`
+- `funding_rate`
+
+所以现阶段回测解读原则是：
+
+- 把结果视为“已包含手续费、但未完整包含滑点和资金费率”的中间结果
+- 用于筛选策略方向可以
+- 用于判断 OKX 永续真实可交易性仍然不够
+
 ## 参数优先级
 
 当前参数采用单一事实来源：
@@ -104,6 +127,12 @@ minimal_roi:
 trailing_stop: true
 trailing_stop_positive: 0.02
 trailing_stop_positive_offset: 0.025
+
+# 成本模型
+cost_model:
+  fee: 0.001
+  slippage_bps: 5
+  funding_rate_included: false
 
 # 因子配置 (可启用/禁用)
 factors:

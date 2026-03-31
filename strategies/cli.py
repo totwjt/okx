@@ -67,10 +67,22 @@ def get_timeranges(spec: dict) -> dict:
     }
 
 
+def get_cost_model(spec: dict) -> dict:
+    return spec.get('cost_model', {})
+
+
 def run_backtest_phase(name: str, config_path: str, label: str, timerange: str):
+    spec = load_spec(name)
+    cost_model = get_cost_model(spec)
+    fee = cost_model.get('fee')
     print(f"\n[{label}] 回测")
     print(f"  时间范围: {timerange}")
-    os.system(f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}")
+    if fee is not None:
+        print(f"  fee: {fee}")
+    cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
+    if fee is not None:
+        cmd += f" --fee {fee}"
+    os.system(cmd)
 
 
 def generate_strategy_v2(name: str, spec: dict) -> str:
@@ -422,12 +434,22 @@ def cmd_backtest(args):
     phase = args.phase or "train"
     timerange = args.timerange or timeranges[phase]
     config_path = get_config_path(spec)
+    cost_model = get_cost_model(spec)
     
     print(f"运行回测: {name}")
     print(f"  阶段: {phase}")
     print(f"  时间范围: {timerange}")
+    if cost_model.get('fee') is not None:
+        print(f"  fee: {cost_model['fee']}")
+    if cost_model.get('slippage_bps') is not None:
+        print(f"  slippage_bps: {cost_model['slippage_bps']} (当前未自动注入 Freqtrade CLI)")
+    if cost_model.get('funding_rate_included') is False:
+        print(f"  funding_rate: 未纳入")
     
-    os.system(f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}")
+    cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
+    if cost_model.get('fee') is not None:
+        cmd += f" --fee {cost_model['fee']}"
+    os.system(cmd)
 
 
 def cmd_validate(args):
@@ -454,15 +476,20 @@ def cmd_optimize(args):
     epochs = args.epochs or opt_config.get('epochs', 200)
     timerange = args.timerange or spec.get('train_timerange') or opt_config.get('timerange', "20250101-20250930")
     config_path = get_config_path(spec)
+    cost_model = get_cost_model(spec)
     
     print(f"运行参数优化: {name}")
     print(f"  迭代次数: {epochs}")
     print(f"  时间范围: {timerange}")
     print(f"  阶段: train")
+    if cost_model.get('fee') is not None:
+        print(f"  fee: {cost_model['fee']}")
     
     cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timerange} --epochs {epochs} -j 4"
     if opt_config.get('hyperopt_loss'):
         cmd += f" --hyperopt-loss {opt_config['hyperopt_loss']}"
+    if cost_model.get('fee') is not None:
+        cmd += f" --fee {cost_model['fee']}"
     
     os.system(cmd)
     

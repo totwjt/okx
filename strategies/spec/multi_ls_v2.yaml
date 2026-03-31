@@ -1,4 +1,11 @@
 can_short: true
+cost_model:
+  fee: 0.001
+  slippage_bps: 5
+  funding_rate_included: false
+  notes:
+  - Freqtrade CLI 当前接入 fee
+  - slippage 和 funding 仍需单独补充研究或执行层建模
 derived_indicators:
 - formula: dataframe['ma'].diff(3)
   name: ma_slope

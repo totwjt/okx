@@ -90,6 +90,16 @@ optimization:
   epochs: 200
   hyperopt_loss: ShortTradeDurHyperOptLoss
   timerange: 20250101-20250930
+risk_model:
+  max_open_trades: 3
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 20.0
+  max_consecutive_losses: 3
+  cooldown_candles_after_loss_streak: 12
+  protections_in_config_required: true
+  notes:
+  - 当前 YAML 负责定义风险边界
+  - 部分风控需在 Freqtrade config 或执行层继续实现
 stoploss: -0.05
 train_timerange: 20250101-20250930
 validation_timerange: 20251001-20251130

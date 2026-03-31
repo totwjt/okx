@@ -89,6 +89,32 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 - 用于筛选策略方向可以
 - 用于判断 OKX 永续真实可交易性仍然不够
 
+## 风控模型
+
+当前策略规范会显式记录：
+
+- `max_open_trades`
+- `max_daily_loss_pct`
+- `max_drawdown_pct`
+- `max_consecutive_losses`
+- `cooldown_candles_after_loss_streak`
+
+当前已接入：
+
+- 风控边界进入 YAML
+- CLI 在回测/优化时会打印当前风控边界
+
+当前仍未完整自动接入：
+
+- 单日亏损熔断
+- 连续亏损后冷却
+- 基于回测结果自动停止后续流程
+
+所以现阶段风控解读原则是：
+
+- 先把风险约束显式化，作为研发和审查边界
+- 真正执行级熔断仍需在线上执行层或 Freqtrade config 继续落地
+
 ## 参数优先级
 
 当前参数采用单一事实来源：
@@ -193,6 +219,14 @@ optimization:
   epochs: 200
   timerange: "20250101-20250930"
   hyperopt_loss: "ShortTradeDurHyperOptLoss"
+
+# 风控模型
+risk_model:
+  max_open_trades: 3
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 20.0
+  max_consecutive_losses: 3
+  cooldown_candles_after_loss_streak: 12
 
 # 三段式时间范围
 train_timerange: "20250101-20250930"

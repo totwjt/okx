@@ -71,14 +71,23 @@ def get_cost_model(spec: dict) -> dict:
     return spec.get('cost_model', {})
 
 
+def get_risk_model(spec: dict) -> dict:
+    return spec.get('risk_model', {})
+
+
 def run_backtest_phase(name: str, config_path: str, label: str, timerange: str):
     spec = load_spec(name)
     cost_model = get_cost_model(spec)
+    risk_model = get_risk_model(spec)
     fee = cost_model.get('fee')
     print(f"\n[{label}] 回测")
     print(f"  时间范围: {timerange}")
     if fee is not None:
         print(f"  fee: {fee}")
+    if risk_model.get('max_open_trades') is not None:
+        print(f"  max_open_trades: {risk_model['max_open_trades']}")
+    if risk_model.get('max_drawdown_pct') is not None:
+        print(f"  max_drawdown_pct: {risk_model['max_drawdown_pct']}")
     cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
     if fee is not None:
         cmd += f" --fee {fee}"
@@ -435,6 +444,7 @@ def cmd_backtest(args):
     timerange = args.timerange or timeranges[phase]
     config_path = get_config_path(spec)
     cost_model = get_cost_model(spec)
+    risk_model = get_risk_model(spec)
     
     print(f"运行回测: {name}")
     print(f"  阶段: {phase}")
@@ -445,6 +455,8 @@ def cmd_backtest(args):
         print(f"  slippage_bps: {cost_model['slippage_bps']} (当前未自动注入 Freqtrade CLI)")
     if cost_model.get('funding_rate_included') is False:
         print(f"  funding_rate: 未纳入")
+    if risk_model:
+        print(f"  风控边界: max_open_trades={risk_model.get('max_open_trades')}, max_daily_loss_pct={risk_model.get('max_daily_loss_pct')}, max_drawdown_pct={risk_model.get('max_drawdown_pct')}")
     
     cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
     if cost_model.get('fee') is not None:
@@ -477,6 +489,7 @@ def cmd_optimize(args):
     timerange = args.timerange or spec.get('train_timerange') or opt_config.get('timerange', "20250101-20250930")
     config_path = get_config_path(spec)
     cost_model = get_cost_model(spec)
+    risk_model = get_risk_model(spec)
     
     print(f"运行参数优化: {name}")
     print(f"  迭代次数: {epochs}")
@@ -484,6 +497,8 @@ def cmd_optimize(args):
     print(f"  阶段: train")
     if cost_model.get('fee') is not None:
         print(f"  fee: {cost_model['fee']}")
+    if risk_model:
+        print(f"  风控边界: max_open_trades={risk_model.get('max_open_trades')}, max_daily_loss_pct={risk_model.get('max_daily_loss_pct')}, max_drawdown_pct={risk_model.get('max_drawdown_pct')}")
     
     cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timerange} --epochs {epochs} -j 4"
     if opt_config.get('hyperopt_loss'):
@@ -559,6 +574,12 @@ def cmd_config(args):
             factor = factors.get(factor_name, {})
             if field_name in factor:
                 print(f"  {key}: {factor[field_name]}")
+
+        print("\n--- 风控模型 ---")
+        risk_model = get_risk_model(spec)
+        for key, value in risk_model.items():
+            if key != "notes":
+                print(f"  {key}: {value}")
         
         print()
         return

@@ -2,6 +2,7 @@
   "strategy": "MultiLsV2Strategy",
   "source_of_truth": "strategies/spec/multi_ls_v2.yaml",
   "cost_model_source": "strategies/spec/multi_ls_v2.yaml",
+  "risk_model_source": "strategies/spec/multi_ls_v2.yaml",
   "strategy_params": {
     "ma_period": 204,
     "rsi_period": 18,
@@ -9,6 +10,13 @@
     "rsi_overbought": 65.0,
     "stoploss": -0.05,
     "timeframe": "15m"
+  },
+  "risk_model": {
+    "max_open_trades": 3,
+    "max_daily_loss_pct": 3.0,
+    "max_drawdown_pct": 20.0,
+    "max_consecutive_losses": 3,
+    "cooldown_candles_after_loss_streak": 12
   },
   "backtest": {
     "timerange": "20250101-",

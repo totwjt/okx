@@ -27,6 +27,14 @@ def load_spec(name: str) -> dict:
         return yaml.safe_load(f)
 
 
+PARAM_FACTOR_MAP = {
+    "ma_period": ("ma", "period"),
+    "rsi_period": ("rsi", "period"),
+    "rsi_oversold": ("rsi_oversold", "value"),
+    "rsi_overbought": ("rsi_overbought", "value"),
+}
+
+
 def generate_strategy_v2(name: str, spec: dict) -> str:
     class_name = ''.join(word.capitalize() for word in name.replace('-', ' ').replace('_', ' ').split()) + 'Strategy'
     
@@ -492,10 +500,12 @@ def cmd_config(args):
                 if 'period' in fconfig:
                     print(f"  周期: {fconfig['period']}")
         
-        print("\n--- config_overrides ---")
-        overrides = spec.get('config_overrides', {})
-        for k, v in overrides.items():
-            print(f"  {k}: {v}")
+        print("\n--- 当前默认参数基线 ---")
+        factors = spec.get('factors', {})
+        for key, (factor_name, field_name) in PARAM_FACTOR_MAP.items():
+            factor = factors.get(factor_name, {})
+            if field_name in factor:
+                print(f"  {key}: {factor[field_name]}")
         
         print()
         return
@@ -507,15 +517,23 @@ def cmd_config(args):
         except ValueError:
             pass
         
-        if 'config_overrides' not in spec:
-            spec['config_overrides'] = {}
-        spec['config_overrides'][key] = value
+        if key not in PARAM_FACTOR_MAP:
+            print(f"错误: 暂不支持设置参数 {key}")
+            print(f"支持的参数: {', '.join(PARAM_FACTOR_MAP.keys())}")
+            sys.exit(1)
+
+        factor_name, field_name = PARAM_FACTOR_MAP[key]
+        if 'factors' not in spec or factor_name not in spec['factors']:
+            print(f"错误: 规范中找不到参数对应的因子 {factor_name}")
+            sys.exit(1)
+
+        spec['factors'][factor_name][field_name] = value
         
         spec_file = SPEC_DIR / f"{name}.yaml"
         with open(spec_file, 'w', encoding='utf-8') as f:
             yaml.dump(spec, f, allow_unicode=True, default_flow_style=False)
         
-        print(f"已设置 {key} = {value}")
+        print(f"已设置默认参数 {key} = {value}")
         print("请重新生成策略: generate", name)
         return
     

@@ -49,6 +49,19 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py optimize mul
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls_v2
 ```
 
+## 参数优先级
+
+当前参数采用单一事实来源：
+
+1. `spec/multi_ls_v2.yaml`
+2. `generated/multi_ls_v2.py` 与 `auto_multi_ls_v2.py` 由 YAML 生成
+3. `config/strategy_config.json` 仅作为运行说明和参数快照，不是主参数源
+
+推荐做法：
+
+- 修改默认参数时，优先更新 `spec/multi_ls_v2.yaml`
+- 然后重新执行 `generate`
+
 ## 策略配置文件格式 (YAML)
 
 ### 完整示例
@@ -138,10 +151,6 @@ optimization:
 # 测试时间范围
 test_timerange: "20251101-"
 
-# 运行时参数覆盖
-config_overrides:
-  ma_period: 204
-  rsi_period: 18
 ```
 
 ## 可用因子

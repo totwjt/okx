@@ -1,5 +1,6 @@
 {
   "strategy": "MultiLsV2Strategy",
+  "source_of_truth": "strategies/spec/multi_ls_v2.yaml",
   "strategy_params": {
     "ma_period": 204,
     "rsi_period": 18,

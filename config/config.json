@@ -33,20 +33,24 @@
     "secret": "${OKX_SECRET_KEY}",
     "passphrase": "${OKX_PASSPHRASE}",
     "ccxt_config": {
-      "aiohttp_trust_env": true
+      "aiohttp_trust_env": true,
+      "options": {"defaultType": "swap"}
     },
     "ccxt_async_config": {
-      "aiohttp_trust_env": true
+      "aiohttp_trust_env": true,
+      "options": {"defaultType": "swap"}
     },
     "pair_whitelist": [
-      "BTC/USDT",
-      "ETH/USDT",
-      "SOL/USDT",
-      "XRP/USDT",
-      "DOGE/USDT"
+      "BTC/USDT:USDT",
+      "ETH/USDT:USDT",
+      "SOL/USDT:USDT",
+      "XRP/USDT:USDT",
+      "DOGE/USDT:USDT"
     ],
     "pair_blacklist": []
   },
+  "trading_mode": "futures",
+  "margin_mode": "isolated",
   "pairlists": [
     {
       "method": "StaticPairList"

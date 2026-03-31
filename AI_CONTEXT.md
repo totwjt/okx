@@ -33,8 +33,6 @@ docker logs -f freqtrade
 ### 本地研究脚本
 
 ```bash
-python3 backtest/custom_backtest.py --symbol BTC-USDT --timeframe 5m
-python3 backtest/vbt_backtest.py --symbol BTC-USDT --timeframe 5m
 python3 backtest/multi_trend_backtest.py --symbol BTC-USDT --timeframe 15m
 ```
 

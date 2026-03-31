@@ -41,6 +41,11 @@ AI-OuYi/
 - `freqtrade_bot/`: 自定义实时机器人原型
 - `user_data/`: Freqtrade 模板目录，不是当前主运行目录
 
+补充说明：
+
+- `ft_userdata/user_data/config.json` 属于本地运行态配置，通常不纳入 git
+- 需要可提交、可审查的参数与风控快照时，优先看 `config/strategy_config.json`
+
 ## 技术栈
 
 - 主框架: `Freqtrade`
@@ -62,7 +67,7 @@ Docker 常用命令：
 
 ```bash
 docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s VolumeRatioStrategy
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
 docker logs -f freqtrade
 ```
 
@@ -95,6 +100,7 @@ docker logs -f freqtrade
 
 - 当前默认策略为 `MultiLsV2Strategy`
 - Docker 默认启动策略已切到多空主线
+- `Freqtrade protections` 已接入基础保护: `CooldownPeriod`、`StoplossGuard`、`MaxDrawdown`
 - 文档、策略类名、Docker 副本之间存在一定漂移，需要核对后再行动
 
 ## AI 接手建议

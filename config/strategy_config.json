@@ -18,6 +18,14 @@
     "max_consecutive_losses": 3,
     "cooldown_candles_after_loss_streak": 12
   },
+  "freqtrade_protections_mapping": {
+    "enabled": true,
+    "cooldown_period_candles": 12,
+    "stoploss_guard_trade_limit": 3,
+    "stoploss_guard_lookback_candles": 96,
+    "max_drawdown_lookback_candles": 96,
+    "max_allowed_drawdown": 0.2
+  },
   "backtest": {
     "timerange": "20250101-",
     "stake_amount": 100,

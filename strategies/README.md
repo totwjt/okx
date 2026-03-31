@@ -103,6 +103,7 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 
 - 风控边界进入 YAML
 - CLI 在回测/优化时会打印当前风控边界
+- `ft_userdata/user_data/config.json` 已加入 `CooldownPeriod` / `StoplossGuard` / `MaxDrawdown`
 
 当前仍未完整自动接入：
 
@@ -113,7 +114,8 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 所以现阶段风控解读原则是：
 
 - 先把风险约束显式化，作为研发和审查边界
-- 真正执行级熔断仍需在线上执行层或 Freqtrade config 继续落地
+- `Freqtrade protections` 已接入部分通用保护
+- 真正执行级日内熔断仍需在线上执行层或更细粒度风控逻辑继续落地
 
 ## 参数优先级
 

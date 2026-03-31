@@ -63,6 +63,11 @@ AI-OuYi/
 - `ft_userdata/user_data/config.json`
 - `strategies/`
 
+版本判断说明：
+
+- 当前以 Docker 主环境为准理解 Freqtrade 版本与兼容性
+- 本地 package 安装路径上出现过的历史兼容性问题，不应覆盖 Docker 口径
+
 Docker 常用命令：
 
 ```bash

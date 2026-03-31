@@ -16,6 +16,7 @@
 
 - `ft_userdata/docker-compose.yml` 默认通过 `trade` 启动 `MultiLsV2Strategy`
 - 本地 `strategies/` 是唯一策略源码目录，并直接挂载进 Docker
+- 当前版本判断以 Docker 环境为准；关于本地 package 安装引发的旧兼容性记忆，不作为当前判断依据
 - 历史回测里可能还会看到 `MultiLSStrategy`、`LongShortSwitchStrategy` 等旧名字，它们不再是当前主线
 - `user_data/` 更像模板目录，不是主要运行目录
 - 当前执行架构决策: `Freqtrade` 为主执行层，自定义 OKX 机器人仅为原型参考

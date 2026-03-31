@@ -48,6 +48,20 @@ class MultiLsV2Strategy(IStrategy):
     }
     
     order_time_in_force = {"entry": "GTC", "exit": "GTC"}
+
+    @property
+    def protections(self):
+        return [       {'method': 'CooldownPeriod', 'stop_duration_candles': 12},
+        {       'method': 'StoplossGuard',
+                'lookback_period_candles': 96,
+                'trade_limit': 3,
+                'stop_duration_candles': 12,
+                'only_per_pair': False},
+        {       'method': 'MaxDrawdown',
+                'lookback_period_candles': 96,
+                'trade_limit': 20,
+                'stop_duration_candles': 12,
+                'max_allowed_drawdown': 0.2}]
     
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe['ma'] = ta.SMA(dataframe['close'], timeperiod=self.ma_period.value)

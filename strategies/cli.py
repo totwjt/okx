@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import pprint
 import sys
 import yaml
 from pathlib import Path
@@ -75,6 +76,40 @@ def get_risk_model(spec: dict) -> dict:
     return spec.get('risk_model', {})
 
 
+def build_protections(spec: dict) -> list[dict]:
+    risk_model = get_risk_model(spec)
+    protections = []
+
+    cooldown = risk_model.get('cooldown_candles_after_loss_streak')
+    if cooldown:
+        protections.append({
+            "method": "CooldownPeriod",
+            "stop_duration_candles": int(cooldown),
+        })
+
+    stoploss_trade_limit = risk_model.get('max_consecutive_losses')
+    if stoploss_trade_limit:
+        protections.append({
+            "method": "StoplossGuard",
+            "lookback_period_candles": int(risk_model.get('stoploss_guard_lookback_candles', 96)),
+            "trade_limit": int(stoploss_trade_limit),
+            "stop_duration_candles": int(cooldown or 12),
+            "only_per_pair": False,
+        })
+
+    max_drawdown_pct = risk_model.get('max_drawdown_pct')
+    if max_drawdown_pct is not None:
+        protections.append({
+            "method": "MaxDrawdown",
+            "lookback_period_candles": int(risk_model.get('max_drawdown_lookback_candles', 96)),
+            "trade_limit": int(risk_model.get('max_drawdown_trade_limit', 20)),
+            "stop_duration_candles": int(cooldown or 12),
+            "max_allowed_drawdown": float(max_drawdown_pct) / 100.0,
+        })
+
+    return protections
+
+
 def run_backtest_phase(name: str, config_path: str, label: str, timerange: str):
     spec = load_spec(name)
     cost_model = get_cost_model(spec)
@@ -91,6 +126,8 @@ def run_backtest_phase(name: str, config_path: str, label: str, timerange: str):
     cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
     if fee is not None:
         cmd += f" --fee {fee}"
+    if build_protections(spec):
+        cmd += " --enable-protections"
     os.system(cmd)
 
 
@@ -174,6 +211,7 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
     exit_cond = spec.get('exit_conditions', {})
     long_exit = exit_cond.get('long', 'False').replace('\n', ' ').replace('  ', ' ')
     short_exit = exit_cond.get('short', 'False').replace('\n', ' ').replace('  ', ' ')
+    protections = pprint.pformat(build_protections(spec), indent=8, sort_dicts=False)
     
     code = f'''"""
 {spec.get('description', name)} V{spec.get('version', '1.0')} - Auto-generated strategy
@@ -222,6 +260,10 @@ class {class_name}(IStrategy):
     }}
     
     order_time_in_force = {{"entry": "GTC", "exit": "GTC"}}
+
+    @property
+    def protections(self):
+        return {protections}
     
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
 {chr(10).join(indicators_code)}
@@ -461,6 +503,8 @@ def cmd_backtest(args):
     cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
     if cost_model.get('fee') is not None:
         cmd += f" --fee {cost_model['fee']}"
+    if build_protections(spec):
+        cmd += " --enable-protections"
     os.system(cmd)
 
 
@@ -505,6 +549,8 @@ def cmd_optimize(args):
         cmd += f" --hyperopt-loss {opt_config['hyperopt_loss']}"
     if cost_model.get('fee') is not None:
         cmd += f" --fee {cost_model['fee']}"
+    if build_protections(spec):
+        cmd += " --enable-protections"
     
     os.system(cmd)
     
@@ -533,6 +579,8 @@ def cmd_run(args):
     cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timeranges['train']} --epochs {epochs} -j 4"
     if opt_config.get('hyperopt_loss'):
         cmd += f" --hyperopt-loss {opt_config['hyperopt_loss']}"
+    if build_protections(spec):
+        cmd += " --enable-protections"
     os.system(cmd)
     print()
     

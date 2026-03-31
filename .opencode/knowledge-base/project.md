@@ -6,6 +6,7 @@
 
 - `Freqtrade` 策略开发与回测
 - 基于 `python-okx` / `vectorbt` 的研究型脚本
+- 面向研究因子的自建数据同步与标准化
 - 面向 AI 的策略生成和协作文档
 
 从现实角度看，它目前属于“研究验证阶段”，不是已经完成实盘工程化的系统。
@@ -45,6 +46,7 @@ AI-OuYi/
 
 - `ft_userdata/user_data/config.json` 属于本地运行态配置，通常不纳入 git
 - 需要可提交、可审查的参数与风控快照时，优先看 `config/strategy_config.json`
+- `ft_userdata/user_data/external_data/` 适合作为研究型外部因子数据统一落盘目录
 
 ## 技术栈
 
@@ -90,8 +92,29 @@ docker logs -f freqtrade
 - 阅读和修改研究脚本
 - 跑非 Docker 的研究回测
 - 生成策略代码
+- 编写与运行自建数据同步脚本
 
 不应默认把本地环境视作与 Docker 完全等价。
+
+## 数据架构补充结论
+
+对于 OKX 合约研究，`Freqtrade` 继续作为主执行与回测框架，但不应被视作完整研究数据平台。
+
+未来涉及以下因子时，优先走自建数据同步模块，而不是依赖 `Freqtrade` 的内建下载能力或临时在线抓取：
+
+- `funding_rate`
+- `mark / index / premium`
+- `open_interest`
+- `long-short ratio`
+- `taker buy/sell volume`
+- 交易规则类元数据，例如精度、最小下单量、杠杆档位、手续费档位
+
+推荐的最小演进方向：
+
+1. 建立独立的数据同步脚本或模块
+2. 统一把研究因子落盘到 `ft_userdata/user_data/external_data/`
+3. 策略与回测层只消费标准化后的本地数据
+4. 将下载、补齐、缓存、版本化与策略逻辑解耦
 
 ## 当前研究方向
 
@@ -107,6 +130,7 @@ docker logs -f freqtrade
 - Docker 默认启动策略已切到多空主线
 - `Freqtrade protections` 已接入基础保护: `CooldownPeriod`、`StoplossGuard`、`MaxDrawdown`
 - 文档、策略类名、Docker 副本之间存在一定漂移，需要核对后再行动
+- 针对 `funding_rate` 这类合约因子，仓库已经开始引入外部数据文件读取路径，不再默认依赖单一内建下载链路
 
 ## AI 接手建议
 

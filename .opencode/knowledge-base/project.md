@@ -105,7 +105,9 @@ docker logs -f freqtrade
 2. 核对 `ft_userdata/docker-compose.yml`
 3. 核对 `ft_userdata/user_data/config.json`
 4. 检查最新回测产物
-5. 只修改 `strategies/`，不要再同时改一份 Docker 副本
+5. 阅读 `execution-architecture.md`
+6. 按 `ai-development-sop.md` 执行
+7. 只修改 `strategies/`，不要再同时改一份 Docker 副本
 
 ## OpenCode 加载说明
 
@@ -114,6 +116,8 @@ OpenCode 会优先加载：
 1. `~/.config/opencode/instructions.md`
 2. `.opencode/knowledge-base/project.md`
 3. `.opencode/knowledge-base/ai-collaboration.md`
+4. `.opencode/knowledge-base/execution-architecture.md`
+5. `.opencode/knowledge-base/ai-development-sop.md`
 
 如需更准确接手上下文，还应主动读取：
 

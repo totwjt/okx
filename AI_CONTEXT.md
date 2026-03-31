@@ -18,6 +18,7 @@
 - 本地 `strategies/` 是唯一策略源码目录，并直接挂载进 Docker
 - 历史回测里可能还会看到 `MultiLSStrategy`、`LongShortSwitchStrategy` 等旧名字，它们不再是当前主线
 - `user_data/` 更像模板目录，不是主要运行目录
+- 当前执行架构决策: `Freqtrade` 为主执行层，自定义 OKX 机器人仅为原型参考
 
 ## 运行入口
 
@@ -49,3 +50,4 @@ python3 backtest/multi_trend_backtest.py --symbol BTC-USDT --timeframe 15m
 - 优先做一致性检查: 文档、配置、策略类名、Docker 副本是否一致。
 - 对交易相关结论保持保守: 先看回测结果，再看成本模型，再看执行可行性。
 - 如果用户要求“不要改功能代码”，只更新文档、知识库、流程说明和 AI 约束。
+- 如果涉及执行层路线调整，先读 `execution-architecture.md` 再动手。

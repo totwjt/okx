@@ -78,7 +78,7 @@ AI-OuYi/
 
 - 仓库当前只保留一个多空主线策略: `MultiLsV2Strategy`。
 - `MultiLS`、`LongShortSwitch`、`TrendFollowing` 等历史变体已退出主线，不再继续演进。
-- `freqtrade_bot/realtime_bot.py` 目前更像信号演示原型，不应视作生产交易执行引擎。
+- `Freqtrade` 是当前主执行层，`freqtrade_bot/realtime_bot.py` 仅保留为原型参考。
 
 ## 建议的阅读顺序
 
@@ -87,4 +87,6 @@ AI-OuYi/
 3. `.opencode/knowledge-base/ai-collaboration.md`
 4. `ft_userdata/docker-compose.yml`
 5. `ft_userdata/user_data/config.json`
-6. `strategies/README.md`
+6. `.opencode/knowledge-base/execution-architecture.md`
+7. `.opencode/knowledge-base/ai-development-sop.md`
+8. `strategies/README.md`

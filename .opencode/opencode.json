@@ -6,6 +6,8 @@
   "instructions": [
     "~/.config/opencode/instructions.md",
     ".opencode/knowledge-base/project.md",
-    ".opencode/knowledge-base/ai-collaboration.md"
+    ".opencode/knowledge-base/ai-collaboration.md",
+    ".opencode/knowledge-base/execution-architecture.md",
+    ".opencode/knowledge-base/ai-development-sop.md"
   ]
 }

@@ -13,7 +13,7 @@ load_dotenv()
 API_KEY = os.getenv("OKX_API_KEY", "")
 SECRET_KEY = os.getenv("OKX_SECRET_KEY", "")
 PASSPHRASE = os.getenv("OKX_PASSPHRASE", "")
-USE_SANDBOX = os.getenv("OKX_USE_SANDBOX", "true").lower() == "true"
+USE_SANDBOX = False  # 实盘获取更多历史数据
 
 OKX_FEE = 0.0005
 SLIPPAGE = 0.0002

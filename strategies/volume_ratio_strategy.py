@@ -1,11 +1,7 @@
-"""
-OKX 超短线量能策略机器人
-核心策略：缩量下跌买入，放量上涨卖出
-"""
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-from typing import Optional
+import talib as ta
 
 from freqtrade.strategy import (
     IStrategy,
@@ -14,18 +10,17 @@ from freqtrade.strategy import (
 )
 
 
-class VolumeRatioStrategy(IStrategy):
+class VolumeRatioStrategyV1(IStrategy):
     INTERFACE_VERSION = 3
 
     can_short = False
 
     minimal_roi = {
-        "0": 0.02,
-        "5": 0.01,
-        "30": 0.005,
+        "0": 0.015,
+        "10": 0.01,
     }
 
-    stoploss = -0.03
+    stoploss = -0.015
 
     trailing_stop = True
     trailing_stop_positive = 0.01
@@ -38,9 +33,9 @@ class VolumeRatioStrategy(IStrategy):
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    buy_volume_ratio_threshold = DecimalParameter(0.3, 0.9, default=0.7, decimals=2, space="buy")
-    sell_volume_ratio_threshold = DecimalParameter(1.1, 2.5, default=1.5, decimals=2, space="sell")
-    volume_ma_window = IntParameter(5, 50, default=20, space="buy")
+    buy_volume_ratio_threshold = DecimalParameter(0.2, 0.4, default=0.3, decimals=2, space="buy")
+    sell_volume_ratio_threshold = DecimalParameter(2.0, 3.5, default=2.5, decimals=2, space="sell")
+    volume_ma_window = IntParameter(8, 20, default=10, space="buy")
 
     startup_candle_count = 50
 
@@ -71,18 +66,20 @@ class VolumeRatioStrategy(IStrategy):
         dataframe["volume_ratio"] = dataframe["volume"] / dataframe["volume_ma"]
 
         dataframe["price_change"] = dataframe["close"].pct_change()
-        dataframe["price_direction"] = np.where(dataframe["close"] > dataframe["close"].shift(1), 1, -1)
+        dataframe["ma20"] = ta.SMA(dataframe["close"], timeperiod=20)
+        dataframe["ma50"] = ta.SMA(dataframe["close"], timeperiod=50)
 
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        price_in_range = (dataframe["close"] > dataframe["ma50"]) & (dataframe["close"] < dataframe["ma20"])
+        
+        price_dropping = dataframe["close"] < dataframe["close"].shift(1)
+        
+        low_volume = dataframe["volume_ratio"] < self.buy_volume_ratio_threshold.value
+
         dataframe.loc[
-            (
-                (dataframe["volume_ratio"] < self.buy_volume_ratio_threshold.value)
-                & (dataframe["price_change"] < 0)
-                & (dataframe["volume"] > 0)
-                & (dataframe["volume_ratio"].notna())
-            ),
+            (price_in_range & price_dropping & low_volume),
             "enter_long",
         ] = 1
 
@@ -92,9 +89,7 @@ class VolumeRatioStrategy(IStrategy):
         dataframe.loc[
             (
                 (dataframe["volume_ratio"] > self.sell_volume_ratio_threshold.value)
-                & (dataframe["price_change"] > 0)
-                & (dataframe["volume"] > 0)
-                & (dataframe["volume_ratio"].notna())
+                & (dataframe["close"] < dataframe["close"].shift(1))
             ),
             "exit_long",
         ] = 1

@@ -1,0 +1,38 @@
+{
+  "strategy_name": "BTCRegimePullbackStrategy",
+  "params": {
+    "max_open_trades": {
+      "max_open_trades": 3
+    },
+    "buy": {
+      "buy_adx_1h": 38,
+      "buy_atr_cap": 0.029,
+      "buy_bb_std": 1.9,
+      "buy_bb_window": 18,
+      "buy_rsi_long": 22,
+      "buy_rsi_short": 77
+    },
+    "sell": {
+      "sell_exit_rsi_long": 65,
+      "sell_exit_rsi_short": 25,
+      "sell_reclaim_buffer": 0.002
+    },
+    "roi": {
+      "0": 0.386,
+      "68": 0.134,
+      "179": 0.045,
+      "271": 0
+    },
+    "stoploss": {
+      "stoploss": -0.157
+    },
+    "trailing": {
+      "trailing_stop": true,
+      "trailing_stop_positive": 0.069,
+      "trailing_stop_positive_offset": 0.123,
+      "trailing_only_offset_is_reached": false
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2026-03-31 09:22:41.553608+00:00"
+}

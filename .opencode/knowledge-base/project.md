@@ -21,14 +21,17 @@ AI-OuYi/
 │       ├── project.md
 │       ├── docker.md
 │       └── ai-collaboration.md
-├── backtest/
-├── config/
-├── freqtrade_bot/
-├── ft_userdata/
-│   ├── docker-compose.yml
-│   └── user_data/
+├── apps/
+├── data/
+├── docs/
+├── execution/
+│   ├── configs/
+│   ├── freqtrade/
+│   │   ├── docker-compose.yml
+│   │   └── user_data/
+│   └── templates/
+├── research/
 ├── strategies/
-├── user_data/
 ├── AGENTS.md
 ├── AI_CONTEXT.md
 └── requirements.txt
@@ -36,17 +39,19 @@ AI-OuYi/
 
 ## 目录职责
 
-- `ft_userdata/user_data/`: Docker 当前实际使用的数据、配置、策略和回测结果
+- `execution/freqtrade/user_data/`: Docker 当前实际使用的数据、配置、策略和回测结果
 - `strategies/`: 唯一策略源码目录，含自动生成策略、YAML 规范、CLI 生成器，并直接挂载到 Docker
-- `backtest/`: 自定义研究脚本，适合快速验证想法
-- `freqtrade_bot/`: 自定义实时机器人原型
-- `user_data/`: Freqtrade 模板目录，不是当前主运行目录
+- `research/`: 研究脚本、实验与报告
+- `apps/prototypes/freqtrade_bot/`: 自定义实时机器人原型
+- `execution/templates/freqtrade_user_data/`: Freqtrade 模板目录，不是当前主运行目录
+- `data/`: 外部数据同步与标准化
+- `execution/configs/`: 样例配置、参数快照与运行参考
 
 补充说明：
 
-- `ft_userdata/user_data/config.json` 属于本地运行态配置，通常不纳入 git
-- 需要可提交、可审查的参数与风控快照时，优先看 `config/strategy_config.json`
-- `ft_userdata/user_data/external_data/` 适合作为研究型外部因子数据统一落盘目录
+- `execution/freqtrade/user_data/config.json` 属于本地运行态配置
+- 需要可提交、可审查的参数与风控快照时，优先看 `execution/configs/strategy_config.snapshot.json`
+- `execution/freqtrade/user_data/external_data/` 适合作为研究型外部因子数据统一落盘目录
 
 ## 技术栈
 
@@ -61,8 +66,8 @@ AI-OuYi/
 
 当前最重要的运行事实来自：
 
-- `ft_userdata/docker-compose.yml`
-- `ft_userdata/user_data/config.json`
+- `execution/freqtrade/docker-compose.yml`
+- `execution/freqtrade/user_data/config.json`
 - `strategies/`
 
 版本判断说明：
@@ -73,9 +78,13 @@ AI-OuYi/
 Docker 常用命令：
 
 ```bash
+docker compose -f execution/freqtrade/docker-compose.yml up -d freqtrade
 docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
 docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
 docker logs -f freqtrade
+execution/scripts/simctl up
+execution/scripts/simctl balance
+execution/scripts/simctl status
 ```
 
 策略目录挂载关系：
@@ -83,7 +92,7 @@ docker logs -f freqtrade
 - 本地: `strategies/`
 - 容器: `/freqtrade/user_data/strategies/`
 
-因此策略开发默认只在本地 `strategies/` 进行，不再单独维护 `ft_userdata/user_data/strategies/` 副本。
+因此策略开发默认只在本地 `strategies/` 进行，不再单独维护 `execution/freqtrade/user_data/strategies/` 副本。
 
 ### 本地 Python 是辅助环境
 
@@ -112,7 +121,7 @@ docker logs -f freqtrade
 推荐的最小演进方向：
 
 1. 建立独立的数据同步脚本或模块
-2. 统一把研究因子落盘到 `ft_userdata/user_data/external_data/`
+2. 统一把研究因子落盘到 `execution/freqtrade/user_data/external_data/`
 3. 策略与回测层只消费标准化后的本地数据
 4. 将下载、补齐、缓存、版本化与策略逻辑解耦
 
@@ -132,17 +141,64 @@ docker logs -f freqtrade
 - 文档、策略类名、Docker 副本之间存在一定漂移，需要核对后再行动
 - 针对 `funding_rate` 这类合约因子，仓库已经开始引入外部数据文件读取路径，不再默认依赖单一内建下载链路
 
+## 运行验证补充结论
+
+截至 2026-04-02，关于 `Docker + OKX + 模拟盘 + VPN` 的结论如下：
+
+- 宿主机在开启 VPN + `SOCKS5 7897` 时，可以直接连通 `OKX` 正式与模拟盘公共 WebSocket。
+- Docker 容器内部也可以通过宿主机 `SOCKS5 7897` 直接连通 `wspap.okx.com`。
+- `Freqtrade` 要接入 `OKX` 模拟盘，当前已知至少需要：
+  1. `x-simulated-trading: 1`
+  2. `ccxt_async_config.urls.api.ws = wss://wspap.okx.com:8443/ws/v5`
+  3. `ccxt_async_config.wsProxy = socks5h://host.docker.internal:7897`
+  4. `options.sandboxMode = true`
+- 当前仓库里的运行态主配置已经按上述方向调整。
+
+当前判断：
+
+- `Freqtrade` 继续作为 OKX 的主执行框架是合理的。
+- `dry-run` 继续作为模拟盘 / 执行验证入口是合理的。
+- 但“是否已可长期稳定运行模拟盘、以及是否可切换到实盘”仍需继续观察和验证，不应提前下结论。
+
+## 目录演进建议
+
+如果项目后续明确走：
+
+- `Freqtrade` 作为主执行框架
+- 在其上持续扩展策略、因子、数据源、模拟盘 / 实盘能力
+
+那么当前结构建议做“收口式优化”，但不建议激进重构。
+
+推荐目标不是立刻推翻现状，而是逐步把仓库分成四层：
+
+1. 执行层
+   - `execution/` 为当前运行态主目录
+   - 其中 `execution/freqtrade/` 是当前主执行目录
+2. 策略层
+   - `strategies/` 继续作为唯一策略源码层
+3. 数据层
+   - 逐步引入 `data/`
+   - 承接 `funding_rate`、`mark/index/premium`、`open_interest` 等扩展数据
+4. 研究层
+   - 保留 `research/`
+   - 语义上明确其为研究与实验，不与主执行层混用
+
+更完整的结构建议见：
+
+- `.opencode/knowledge-base/project-structure-plan.md`
+
 ## AI 接手建议
 
 当 AI 接手任务时，建议顺序如下：
 
 1. 阅读 `AI_CONTEXT.md`
-2. 核对 `ft_userdata/docker-compose.yml`
-3. 核对 `ft_userdata/user_data/config.json`
+2. 核对 `execution/freqtrade/docker-compose.yml`
+3. 核对 `execution/freqtrade/user_data/config.json`
 4. 检查最新回测产物
 5. 阅读 `execution-architecture.md`
 6. 按 `ai-development-sop.md` 执行
 7. 只修改 `strategies/`，不要再同时改一份 Docker 副本
+8. 涉及目录优化时，阅读 `project-structure-plan.md`
 
 ## OpenCode 加载说明
 
@@ -159,6 +215,7 @@ OpenCode 会优先加载：
 - `.opencode/knowledge-base/docker.md`
 - `AI_CONTEXT.md`
 - `AGENTS.md`
+- `.opencode/knowledge-base/project-structure-plan.md`
 
 ---
-最后更新: 2026-03-31
+最后更新: 2026-04-02

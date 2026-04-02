@@ -7,6 +7,7 @@ import sys
 from datetime import datetime, timedelta
 from typing import Optional
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,8 @@ import vectorbt as vbt
 from dotenv import load_dotenv
 from okx import MarketData
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv()
 

@@ -21,22 +21,22 @@ class MultiLsV2Strategy(IStrategy):
     can_short = True
     timeframe = "15m"
     
-    stoploss = -0.05
-    minimal_roi = {"0": 0.02}
+    stoploss = -0.251
+    minimal_roi = {"0": 0.253, "73": 0.118, "217": 0.043, "298": 0}
     
     trailing_stop = True
-    trailing_stop_positive = 0.02
-    trailing_stop_positive_offset = 0.025
+    trailing_stop_positive = 0.147
+    trailing_stop_positive_offset = 0.149
     
     process_only_new_candles = True
     use_exit_signal = True
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
     
-    ma_period = IntParameter(100, 300, default=204, space="buy")
-    rsi_period = IntParameter(7, 21, default=18, space="buy")
-    rsi_oversold = DecimalParameter(20, 35, default=32.5, decimals=1, space="buy")
-    rsi_overbought = DecimalParameter(65, 80, default=65, decimals=1, space="sell")
+    ma_period = IntParameter(100, 300, default=276, space="buy")
+    rsi_period = IntParameter(7, 21, default=15, space="buy")
+    rsi_oversold = DecimalParameter(20, 35, default=26.6, decimals=1, space="buy")
+    rsi_overbought = DecimalParameter(65, 80, default=78.6, decimals=1, space="sell")
     
     startup_candle_count = 300
     

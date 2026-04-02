@@ -6,13 +6,14 @@
 
 1. `Freqtrade` 作为主交易执行框架
 2. `strategies/` 下的 `MultiLsV2Strategy` 作为唯一主线策略
-3. `freqtrade_bot/realtime_bot.py` 仅保留为原型参考，不作为当前生产执行主线
+3. `apps/prototypes/freqtrade_bot/realtime_bot.py` 仅保留为原型参考，不作为当前生产执行主线
 
 补充说明：
 
 - 主执行层仍然是 `Freqtrade`
 - 研究数据层应逐步从 `Freqtrade` 内建下载能力中解耦
 - 对合约特有因子，推荐建设独立数据同步模块
+- `OKX` 模拟盘接入不应默认认为与正式盘完全等价，需单独处理代理、WebSocket 地址与请求头
 
 ## 为什么这样决策
 
@@ -43,20 +44,19 @@
 
 ### 主执行层
 
-- `ft_userdata/docker-compose.yml`
-- `ft_userdata/user_data/config.json`
+- `execution/freqtrade/docker-compose.yml`
+- `execution/freqtrade/user_data/config.json`
 - `strategies/auto_multi_ls_v2.py`
 - `strategies/cli.py`
 
 ### 推荐独立数据层
 
-- `backtest/` 下的研究型同步脚本
-- 未来可新增 `data_sync/` 目录
-- `ft_userdata/user_data/external_data/` 作为外部因子统一落盘目录
+- `data/` 下的数据同步与标准化脚本
+- `execution/freqtrade/user_data/external_data/` 作为外部因子统一落盘目录
 
 ### 非主执行层
 
-- `freqtrade_bot/realtime_bot.py`
+- `apps/prototypes/freqtrade_bot/realtime_bot.py`
 
 它目前不具备以下生产能力：
 
@@ -67,6 +67,31 @@
 - 风控熔断闭环
 
 因此不能把它视为当前可上线执行引擎。
+
+## 2026-04-02 运行验证补充
+
+围绕 `OKX` 模拟盘与 `Docker` 的补充结论：
+
+- 宿主机 + VPN 可直接连 `OKX` 正式 / 模拟盘公共 WebSocket。
+- Docker 容器本身也可通过宿主机 `SOCKS5 7897` 直连 `wspap`。
+- 当前瓶颈已从“宿主机网络问题”收缩为“`Freqtrade -> ccxt.pro` 的 WebSocket 代理与模拟盘配置问题”。
+
+当前已知对 `Freqtrade` 有效的关键配置方向：
+
+1. `headers.x-simulated-trading = 1`
+2. `options.sandboxMode = true`
+3. `ccxt_async_config.urls.api.ws = wss://wspap.okx.com:8443/ws/v5`
+4. `ccxt_async_config.wsProxy = socks5h://host.docker.internal:7897`
+
+当前状态：
+
+- 上述配置已写入运行态配置
+- `freqtrade` 已可带着这套配置启动并进入 `RUNNING`
+- 模拟盘私有 REST 与私有 WebSocket 已验证成功
+- `Freqtrade` 的 WebSocket `watch_ohlcv` 在当前代理环境下仍会偶发超时或 `1006` 断开
+- 当前稳定基线是在运行配置中设置 `exchange.enable_ws = false`，优先走 REST 模式
+- 日常运行与观测入口统一到 `execution/scripts/simctl`
+- 是否已通过长时间模拟盘验证、以及是否可直接切到实盘，仍未完成最终确认
 
 ## 什么时候再考虑自建执行层
 
@@ -91,6 +116,7 @@
 - 运行监控完善
 - 自建研究数据同步模块
 - 将外部因子接入回测与策略读取层
+- 继续补全模拟盘 / 实盘配置与运行验证
 
 ### 阶段 B
 
@@ -110,5 +136,5 @@
 
 - 任何涉及“执行架构切换”的修改，都必须先更新本文件
 - 如果只是优化策略，不要顺手把项目从 `Freqtrade` 切到自定义执行层
-- 如果修改 `freqtrade_bot/realtime_bot.py`，默认视作原型研发，不代表主执行架构改变
+- 如果修改 `apps/prototypes/freqtrade_bot/realtime_bot.py`，默认视作原型研发，不代表主执行架构改变
 - 如果新增研究因子数据源，优先理解为“数据层增强”，而不是“执行架构切换”

@@ -4,7 +4,7 @@
 
 让 OpenCode、Codex 以及后续接手的 AI 在这个仓库里基于同一组事实工作，避免重复犯以下错误：
 
-- 把 `user_data/` 误当成当前运行目录
+- 把模板目录误当成当前运行目录
 - 把本地 `strategies/` 误当成容器内已经生效的策略
 - 把回测脚本结论误当成可直接实盘的执行结论
 - 把文档中的旧策略名误当成当前真实策略名
@@ -13,17 +13,17 @@
 
 涉及运行状态时，优先级如下：
 
-1. `ft_userdata/docker-compose.yml`
-2. `ft_userdata/user_data/config.json`
+1. `execution/freqtrade/docker-compose.yml`
+2. `execution/freqtrade/user_data/config.json`
 3. `strategies/`
-4. 最近的 `ft_userdata/user_data/backtest_results/`
+4. 最近的 `execution/freqtrade/user_data/backtest_results/`
 5. 说明性文档
 
 ## 目录角色
 
 - `strategies/`: 本地研发与 Docker 实际执行共用目录
-- `backtest/`: 研究型验证脚本，不等于 Freqtrade 官方回测结果
-- `freqtrade_bot/`: 原型级实时机器人，不是成熟 OMS/EMS
+- `research/`: 研究型验证脚本与报告，不等于 Freqtrade 官方回测结果
+- `apps/prototypes/freqtrade_bot/`: 原型级实时机器人，不是成熟 OMS/EMS
 
 ## AI 修改原则
 

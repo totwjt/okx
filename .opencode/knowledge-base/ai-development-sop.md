@@ -60,7 +60,7 @@
 
 - 优先把研究型因子与 `Freqtrade` 内建下载链路解耦
 - 原始数据、标准化数据、策略读取逻辑分开维护
-- 外部因子优先落盘到 `ft_userdata/user_data/external_data/`
+- 外部因子优先落盘到 `execution/freqtrade/user_data/external_data/`
 - 涉及时间对齐时，先明确时区、频率和前向填充规则
 
 ### 改执行架构

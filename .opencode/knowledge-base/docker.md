@@ -10,7 +10,7 @@
 |------|-----|
 | 容器名称 | `freqtrade` |
 | 运行目录 | `/freqtrade/` |
-| 挂载源 | `ft_userdata/user_data` -> `/freqtrade/user_data` |
+| 挂载源 | `execution/freqtrade/user_data` -> `/freqtrade/user_data` |
 | 策略源码挂载 | `strategies` -> `/freqtrade/user_data/strategies` |
 | 用户数据目录 | `/freqtrade/user_data/` |
 | 策略目录 | `/freqtrade/user_data/strategies/` |
@@ -67,22 +67,22 @@ docker exec freqtrade freqtrade download-data -c /freqtrade/user_data/config.jso
 
 ```bash
 # 启动
-docker-compose up -d
+docker compose -f execution/freqtrade/docker-compose.yml up -d
 
 # 停止
-docker-compose down
+docker compose -f execution/freqtrade/docker-compose.yml down
 
 # 重启
-docker-compose restart
+docker compose -f execution/freqtrade/docker-compose.yml restart
 ```
 
 ## 注意事项
 
 1. **首次启动**需要初始化配置和数据
 2. **API 密钥**在 `.env` 文件中，Docker 启动时自动加载
-3. **数据持久化** - `user_data/` 目录挂载到容器，容器删除后数据保留
+3. **数据持久化** - `execution/freqtrade/user_data/` 目录挂载到容器，容器删除后数据保留
 4. **日志大小** - 定期清理: `docker system prune`
 5. **策略单一事实来源** - 只维护仓库根目录 `strategies/`
 
 ---
-*最后更新: 2026-03-31*
+*最后更新: 2026-04-02*

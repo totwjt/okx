@@ -1,0 +1,27 @@
+profile_name: candidate_from_hopt
+strategy_name: multi_ls_v2
+status: candidate
+source: hyperopt:strategy_MultiLsV2Strategy_2026-03-31_09-21-44.fthypt
+updated_at: '2026-04-02T08:16:15.733730+00:00'
+overrides:
+  factors:
+    ma:
+      period: 276
+    rsi:
+      period: 15
+    rsi_oversold:
+      value: 26.6
+    rsi_overbought:
+      value: 78.6
+  stoploss: -0.251
+  minimal_roi:
+    '0': 0.253
+    '73': 0.118
+    '217': 0.043
+    '298': 0
+  trailing_stop: true
+  trailing_stop_positive: 0.147
+  trailing_stop_positive_offset: 0.149
+  trailing_only_offset_is_reached: true
+  risk_model:
+    max_open_trades: 3

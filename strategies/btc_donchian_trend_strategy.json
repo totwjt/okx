@@ -1,0 +1,37 @@
+{
+  "strategy_name": "BTCDonchianTrendStrategy",
+  "params": {
+    "max_open_trades": {
+      "max_open_trades": 3
+    },
+    "buy": {
+      "buy_adx_1h": 27,
+      "buy_atr_floor": 0.006,
+      "buy_breakout_window": 61,
+      "buy_rsi_long": 54,
+      "buy_rsi_short": 46
+    },
+    "sell": {
+      "sell_exit_ema": 20,
+      "sell_exit_rsi_long": 39,
+      "sell_exit_rsi_short": 63
+    },
+    "roi": {
+      "0": 0.182,
+      "94": 0.099,
+      "199": 0.05,
+      "431": 0
+    },
+    "stoploss": {
+      "stoploss": -0.302
+    },
+    "trailing": {
+      "trailing_stop": true,
+      "trailing_stop_positive": 0.188,
+      "trailing_stop_positive_offset": 0.19,
+      "trailing_only_offset_is_reached": true
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2026-03-31 09:23:19.511366+00:00"
+}

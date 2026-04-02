@@ -15,7 +15,7 @@
 ### Docker 安装步骤
 ```bash
 # 1. 创建目录
-mkdir -p ft_userdata && cd ft_userdata
+mkdir -p execution/freqtrade && cd execution/freqtrade
 
 # 2. 下载 docker-compose.yml
 curl https://raw.githubusercontent.com/freqtrade/freqtrade/stable/docker-compose.yml -o docker-compose.yml
@@ -31,7 +31,7 @@ docker compose run --rm freqtrade new-config --config user_data/config.json
 
 # 6. 复制策略文件
 mkdir -p user_data/strategies
-cp ../AI-OuYi/strategies/auto_multi_ls_v2.py user_data/strategies/
+cp ../../strategies/auto_multi_ls_v2.py user_data/strategies/
 
 # 7. 启动 Bot
 docker compose up -d

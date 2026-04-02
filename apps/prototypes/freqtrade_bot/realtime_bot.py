@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import aiohttp
@@ -13,7 +14,8 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv()
 

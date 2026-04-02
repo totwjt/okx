@@ -1,0 +1,23 @@
+profile_name: default
+strategy_name: multi_ls_v2
+status: draft
+source: spec_defaults
+updated_at: "2026-04-02T00:00:00+00:00"
+overrides:
+  factors:
+    ma:
+      period: 204
+    rsi:
+      period: 18
+    rsi_oversold:
+      value: 32.5
+    rsi_overbought:
+      value: 65
+  stoploss: -0.05
+  minimal_roi:
+    "0": 0.02
+  trailing_stop: true
+  trailing_stop_positive: 0.02
+  trailing_stop_positive_offset: 0.025
+  risk_model:
+    max_open_trades: 3

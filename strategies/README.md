@@ -6,12 +6,26 @@ AI 量化交易策略管理工具，当前聚焦 OKX 合约多空切换策略，
 
 当前唯一主线策略为 `MultiLsV2Strategy`。
 
+当前参数治理采用 `Spec + Profile + Promotion`：
+
+1. `spec/`
+定义策略结构、因子空间、表达式与默认值。
+2. `profiles/`
+定义具体参数档案，例如 `default`、`paper_baseline`、`candidate_xxx`。
+3. `promotion`
+通过 CLI 把 profile 从 `candidate` 晋级到 `validated` / `paper_active` / `live_active`。
+
 ## 目录结构
 
 ```
 strategies/
 ├── spec/                      # 策略配置文件 (YAML)
 │   └── multi_ls_v2.yaml     # 多空切换策略 V2
+├── profiles/                  # 参数档案与激活指针
+│   └── multi_ls_v2/
+│       ├── default.yaml
+│       ├── paper_baseline.yaml
+│       └── _active.yaml
 ├── generated/                 # 自动生成的策略代码
 │   └── multi_ls_v2.py
 ├── templates/                # 策略模板
@@ -27,8 +41,26 @@ strategies/
 所有操作都在 freqtrade Docker 容器内完成：
 
 ```bash
+# 启动主执行环境
+docker compose -f execution/freqtrade/docker-compose.yml up -d freqtrade
+
 # 查看策略列表
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py list
+
+# 查看 profiles
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile list multi_ls_v2
+
+# 查看当前 active profile
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile show multi_ls_v2
+
+# 从当前 active profile 复制创建 candidate
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile create multi_ls_v2 candidate_rsi_soften --from-profile paper_baseline
+
+# 激活某个 profile
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile activate multi_ls_v2 paper_baseline
+
+# 晋级 profile
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile promote multi_ls_v2 paper_baseline paper_active
 
 # 查看策略配置
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py config multi_ls_v2 --list
@@ -103,7 +135,7 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 
 - 风控边界进入 YAML
 - CLI 在回测/优化时会打印当前风控边界
-- `ft_userdata/user_data/config.json` 已加入 `CooldownPeriod` / `StoplossGuard` / `MaxDrawdown`
+- `execution/freqtrade/user_data/config.json` 已加入 `CooldownPeriod` / `StoplossGuard` / `MaxDrawdown`
 
 当前仍未完整自动接入：
 
@@ -122,12 +154,15 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 当前参数采用单一事实来源：
 
 1. `spec/multi_ls_v2.yaml`
-2. `generated/multi_ls_v2.py` 与 `auto_multi_ls_v2.py` 由 YAML 生成
-3. `config/strategy_config.json` 仅作为运行说明和参数快照，不是主参数源
+2. `generated/multi_ls_v2.py` 与 `auto_multi_ls_v2.py` 由策略定义生成
+3. `profiles/multi_ls_v2/*.yaml` 管理具体运行参数组合
+4. `execution/configs/strategy_config.snapshot.json` 仅作为运行说明和参数快照，不是主参数源
 
 推荐做法：
 
 - 修改默认参数时，优先更新 `spec/multi_ls_v2.yaml`
+- 修改候选运行参数时，优先新建或更新 `profiles/`
+- 使用 `profile activate` / `profile promote` 切换当前 active profile
 - 然后重新执行 `generate`
 
 ## 策略配置文件格式 (YAML)

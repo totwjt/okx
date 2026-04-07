@@ -1,742 +1,31 @@
 #!/usr/bin/env python3
 import argparse
-import copy
-import json
-import os
-import pprint
 import shutil
-import subprocess
 import sys
-import yaml
 from pathlib import Path
-from datetime import datetime, timezone
+from services.config_service import print_config, print_config_usage, set_default_config_value
+from services.execution_service import run_backtest, run_backtest_phase, run_hyperopt, runtime_param_snapshot_path
+from services.generation_service import GENERATED_DIR, ensure_generated_strategy
+from services.profile_service import (
+    ensure_default_profile,
+    get_active_profile_name,
+    load_profile,
+)
+from services.profile_workflow_service import activate_profile, create_profile, import_hyperopt_profile, list_profiles, promote_profile, validate_profile
+from services.runtime_service import STRATEGY_DIR, sync_runtime_profile
+from services.spec_service import (
+    SPEC_DIR,
+    build_protections,
+    get_config_path,
+    get_cost_model,
+    get_effective_spec,
+    get_risk_model,
+    get_timeranges,
+    load_spec,
+)
 
-
-STRATEGY_DIR = Path("/freqtrade/user_data/strategies")
-SPEC_DIR = Path("/freqtrade/user_data/strategies/spec")
-GENERATED_DIR = Path("/freqtrade/user_data/strategies/generated")
-RESULTS_DIR = Path("/freqtrade/user_data/strategies/results")
-PROFILE_ROOT_DIR = Path("/freqtrade/user_data/strategies/profiles")
 PROFILE_BT_RESULT_DIR = Path("/freqtrade/user_data/backtest_results/profile_validation")
 CONFIG_DIR = Path("/freqtrade/user_data/config.json")
-
-
-def load_spec(name: str) -> dict:
-    spec_file = SPEC_DIR / f"{name}.yaml"
-    if not spec_file.exists():
-        spec_file = SPEC_DIR / f"{name}.yml"
-    
-    if not spec_file.exists():
-        print(f"错误: 找不到规范文件 {name}.yaml")
-        sys.exit(1)
-    
-    with open(spec_file, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
-
-
-PARAM_FACTOR_MAP = {
-    "ma_period": ("ma", "period"),
-    "rsi_period": ("rsi", "period"),
-    "rsi_oversold": ("rsi_oversold", "value"),
-    "rsi_overbought": ("rsi_overbought", "value"),
-}
-
-PROFILE_DEFAULT_NAME = "default"
-
-
-def strategy_class_name(name: str) -> str:
-    return ''.join(word.capitalize() for word in name.replace('-', ' ').replace('_', ' ').split()) + 'Strategy'
-
-
-def profile_dir(name: str) -> Path:
-    return PROFILE_ROOT_DIR / name
-
-
-def profile_path(name: str, profile_name: str) -> Path:
-    return profile_dir(name) / f"{profile_name}.yaml"
-
-
-def active_profile_path(name: str) -> Path:
-    return profile_dir(name) / "_active.yaml"
-
-
-def ensure_profile_dir(name: str) -> Path:
-    pdir = profile_dir(name)
-    pdir.mkdir(parents=True, exist_ok=True)
-    return pdir
-
-
-def extract_default_overrides(spec: dict) -> dict:
-    factors = spec.get("factors", {})
-    factor_overrides: dict[str, dict] = {}
-    for factor_name, field_name in PARAM_FACTOR_MAP.values():
-        factor = factors.get(factor_name)
-        if not factor:
-            continue
-        factor_overrides.setdefault(factor_name, {})
-        if field_name in factor:
-            factor_overrides[factor_name][field_name] = factor[field_name]
-
-    overrides: dict[str, object] = {"factors": factor_overrides, "risk_model": {}}
-    for key in [
-        "stoploss",
-        "minimal_roi",
-        "trailing_stop",
-        "trailing_stop_positive",
-        "trailing_stop_positive_offset",
-        "trailing_only_offset_is_reached",
-    ]:
-        if key in spec:
-            overrides[key] = spec[key]
-    risk_model = spec.get("risk_model", {})
-    if "max_open_trades" in risk_model:
-        overrides["risk_model"]["max_open_trades"] = risk_model["max_open_trades"]
-    return overrides
-
-
-def default_profile_payload(name: str, spec: dict, profile_name: str = PROFILE_DEFAULT_NAME) -> dict:
-    return {
-        "profile_name": profile_name,
-        "strategy_name": name,
-        "status": "draft",
-        "source": "spec_defaults",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "overrides": extract_default_overrides(spec),
-    }
-
-
-def ensure_default_profile(name: str, spec: dict) -> None:
-    ensure_profile_dir(name)
-    dpath = profile_path(name, PROFILE_DEFAULT_NAME)
-    if not dpath.exists():
-        with open(dpath, "w", encoding="utf-8") as f:
-            yaml.safe_dump(default_profile_payload(name, spec), f, allow_unicode=True, sort_keys=False)
-    apath = active_profile_path(name)
-    if not apath.exists():
-        with open(apath, "w", encoding="utf-8") as f:
-            yaml.safe_dump({"active_profile": PROFILE_DEFAULT_NAME}, f, allow_unicode=True, sort_keys=False)
-
-
-def get_active_profile_name(name: str, spec: dict | None = None) -> str:
-    if spec is not None:
-        ensure_default_profile(name, spec)
-    apath = active_profile_path(name)
-    if not apath.exists():
-        return PROFILE_DEFAULT_NAME
-    with open(apath, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    return data.get("active_profile", PROFILE_DEFAULT_NAME)
-
-
-def load_profile(name: str, spec: dict, profile_name: str | None = None) -> dict:
-    ensure_default_profile(name, spec)
-    resolved = profile_name or get_active_profile_name(name, spec)
-    ppath = profile_path(name, resolved)
-    if not ppath.exists():
-        print(f"错误: 找不到 profile 文件 {resolved}.yaml")
-        sys.exit(1)
-    with open(ppath, "r", encoding="utf-8") as f:
-        profile = yaml.safe_load(f) or {}
-    profile.setdefault("profile_name", resolved)
-    profile.setdefault("strategy_name", name)
-    profile.setdefault("status", "draft")
-    profile.setdefault("overrides", {})
-    return profile
-
-
-def save_profile(name: str, profile: dict) -> Path:
-    ensure_profile_dir(name)
-    profile["updated_at"] = datetime.now(timezone.utc).isoformat()
-    ppath = profile_path(name, profile["profile_name"])
-    with open(ppath, "w", encoding="utf-8") as f:
-        yaml.safe_dump(profile, f, allow_unicode=True, sort_keys=False)
-    return ppath
-
-
-def set_active_profile(name: str, spec: dict, profile_name: str) -> None:
-    ensure_default_profile(name, spec)
-    ppath = profile_path(name, profile_name)
-    if not ppath.exists():
-        print(f"错误: profile 不存在: {profile_name}")
-        sys.exit(1)
-    with open(active_profile_path(name), "w", encoding="utf-8") as f:
-        yaml.safe_dump({"active_profile": profile_name}, f, allow_unicode=True, sort_keys=False)
-
-
-def apply_profile_overrides(spec: dict, profile: dict) -> dict:
-    merged = copy.deepcopy(spec)
-    overrides = profile.get("overrides", {})
-    for factor_name, fields in (overrides.get("factors", {}) or {}).items():
-        merged.setdefault("factors", {}).setdefault(factor_name, {})
-        merged["factors"][factor_name].update(fields or {})
-    for key in [
-        "stoploss",
-        "minimal_roi",
-        "trailing_stop",
-        "trailing_stop_positive",
-        "trailing_stop_positive_offset",
-        "trailing_only_offset_is_reached",
-    ]:
-        if key in overrides:
-            merged[key] = overrides[key]
-    if "risk_model" in overrides:
-        merged.setdefault("risk_model", {}).update(overrides["risk_model"] or {})
-    return merged
-
-
-def get_effective_spec(name: str, profile_name: str | None = None) -> tuple[dict, dict]:
-    spec = load_spec(name)
-    profile = load_profile(name, spec, profile_name)
-    return apply_profile_overrides(spec, profile), profile
-
-
-def build_freqtrade_params(name: str, spec: dict, profile_name: str | None = None) -> dict:
-    factors = spec.get("factors", {})
-    risk_model = spec.get("risk_model", {})
-    params: dict[str, dict] = {
-        "max_open_trades": {"max_open_trades": risk_model.get("max_open_trades", 3)},
-        "buy": {},
-        "sell": {},
-        "roi": spec.get("minimal_roi", {"0": 0.01}),
-        "stoploss": {"stoploss": spec.get("stoploss", -0.03)},
-        "trailing": {
-            "trailing_stop": spec.get("trailing_stop", True),
-            "trailing_stop_positive": spec.get("trailing_stop_positive", 0.01),
-            "trailing_stop_positive_offset": spec.get("trailing_stop_positive_offset", 0.015),
-        },
-    }
-    if spec.get("trailing_only_offset_is_reached") is not None:
-        params["trailing"]["trailing_only_offset_is_reached"] = spec["trailing_only_offset_is_reached"]
-    if factors.get("ma", {}).get("enabled"):
-        params["buy"]["ma_period"] = factors["ma"].get("period")
-    if factors.get("rsi", {}).get("enabled"):
-        params["buy"]["rsi_period"] = factors["rsi"].get("period")
-    if factors.get("rsi_oversold", {}).get("enabled"):
-        params["buy"]["rsi_oversold"] = factors["rsi_oversold"].get("value")
-    if factors.get("rsi_overbought", {}).get("enabled"):
-        params["sell"]["rsi_overbought"] = factors["rsi_overbought"].get("value")
-    return {
-        "strategy_name": strategy_class_name(name),
-        "profile_name": profile_name,
-        "params": params,
-        "ft_stratparam_v": 1,
-        "export_time": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def sync_runtime_profile(name: str, effective_spec: dict, profile: dict) -> Path:
-    runtime_json_path = STRATEGY_DIR / f"auto_{name}.json"
-    with open(runtime_json_path, "w", encoding="utf-8") as f:
-        json.dump(
-            build_freqtrade_params(name, effective_spec, profile.get("profile_name")),
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
-    return runtime_json_path
-
-
-def build_profile_from_hyperopt(name: str, profile_name: str, hyperopt_filename: str, params: dict) -> dict:
-    overrides = {
-        "factors": {
-            "ma": {"period": params["params"]["ma_period"]},
-            "rsi": {"period": params["params"]["rsi_period"]},
-            "rsi_oversold": {"value": params["params"]["rsi_oversold"]},
-            "rsi_overbought": {"value": params["params"]["rsi_overbought"]},
-        },
-        "stoploss": params["stoploss"],
-        "minimal_roi": params["minimal_roi"],
-        "trailing_stop": params["trailing_stop"],
-        "trailing_stop_positive": params["trailing_stop_positive"],
-        "trailing_stop_positive_offset": params["trailing_stop_positive_offset"],
-        "trailing_only_offset_is_reached": params["trailing_only_offset_is_reached"],
-        "risk_model": {
-            "max_open_trades": params["max_open_trades"],
-        },
-    }
-    return {
-        "profile_name": profile_name,
-        "strategy_name": name,
-        "status": "candidate",
-        "source": f"hyperopt:{hyperopt_filename}",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "overrides": overrides,
-    }
-
-
-def read_backtest_summary(zip_path: Path, strategy_name: str) -> dict:
-    import zipfile
-
-    with zipfile.ZipFile(zip_path) as z:
-        json_member = next(
-            (
-                n for n in z.namelist()
-                if n.endswith(".json") and "_config" not in n and "_signals" not in n and "_market_change" not in n
-            ),
-            None,
-        )
-        if not json_member:
-            raise RuntimeError(f"Backtest zip missing result json: {zip_path}")
-        payload = json.loads(z.read(json_member).decode("utf-8"))
-
-    strategy_section = payload.get("strategy")
-    if isinstance(strategy_section, dict):
-        if strategy_name in strategy_section:
-            return strategy_section[strategy_name]
-        if len(strategy_section) == 1:
-            return next(iter(strategy_section.values()))
-
-    raise RuntimeError(f"Strategy metrics not found in backtest result: {zip_path}")
-
-
-def latest_created_backtest_zip(before: set[str], result_dir: Path) -> Path:
-    candidates = [p for p in result_dir.glob("*.zip") if p.name not in before]
-    if not candidates:
-        raise RuntimeError("未找到新的回测结果文件")
-    return max(candidates, key=lambda p: p.stat().st_mtime)
-
-
-def normalize_backtest_metrics(metrics: dict) -> dict:
-    total_trades = int(metrics.get("total_trades", 0) or 0)
-    profit_total = float(metrics.get("profit_total", metrics.get("profit_total_ratio", 0)) or 0)
-    profit_total_abs = float(metrics.get("profit_total_abs", 0) or 0)
-    profit_factor = float(metrics.get("profit_factor", 0) or 0)
-
-    drawdown_candidates = [
-        metrics.get("max_drawdown_account"),
-        metrics.get("max_drawdown"),
-        metrics.get("absolute_drawdown"),
-    ]
-    max_drawdown = 0.0
-    for value in drawdown_candidates:
-        if value is not None:
-            max_drawdown = float(value)
-            break
-
-    return {
-        "total_trades": total_trades,
-        "profit_total": profit_total,
-        "profit_total_abs": profit_total_abs,
-        "profit_factor": profit_factor,
-        "max_drawdown_account": max_drawdown,
-        "stake_currency": metrics.get("stake_currency", "USDT"),
-    }
-
-
-def get_config_path(spec: dict) -> str:
-    trading_mode = spec.get('trading_mode', 'spot')
-    config_path = "/freqtrade/user_data/config.json"
-    if trading_mode == 'futures':
-        futures_config = "/freqtrade/user_data/config_futures.json"
-        if Path(futures_config).exists():
-            config_path = futures_config
-    return config_path
-
-
-def ensure_generated_strategy(name: str, spec: dict) -> Path:
-    code = generate_strategy(name, spec)
-    output_file = GENERATED_DIR / f"{name}.py"
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(code)
-
-    strategy_file = STRATEGY_DIR / f"auto_{name}.py"
-    with open(strategy_file, 'w', encoding='utf-8') as f:
-        f.write(code)
-
-    return output_file
-
-
-def get_timeranges(spec: dict) -> dict:
-    optimization = spec.get('optimization', {})
-    return {
-        "train": spec.get('train_timerange') or optimization.get('timerange', "20250101-20250930"),
-        "validation": spec.get('validation_timerange', "20251001-20251130"),
-        "test": spec.get('test_timerange', "20251201-"),
-    }
-
-
-def get_cost_model(spec: dict) -> dict:
-    return spec.get('cost_model', {})
-
-
-def get_risk_model(spec: dict) -> dict:
-    return spec.get('risk_model', {})
-
-
-def build_protections(spec: dict) -> list[dict]:
-    risk_model = get_risk_model(spec)
-    protections = []
-
-    cooldown = risk_model.get('cooldown_candles_after_loss_streak')
-    if cooldown:
-        protections.append({
-            "method": "CooldownPeriod",
-            "stop_duration_candles": int(cooldown),
-        })
-
-    stoploss_trade_limit = risk_model.get('max_consecutive_losses')
-    if stoploss_trade_limit:
-        protections.append({
-            "method": "StoplossGuard",
-            "lookback_period_candles": int(risk_model.get('stoploss_guard_lookback_candles', 96)),
-            "trade_limit": int(stoploss_trade_limit),
-            "stop_duration_candles": int(cooldown or 12),
-            "only_per_pair": False,
-        })
-
-    max_drawdown_pct = risk_model.get('max_drawdown_pct')
-    if max_drawdown_pct is not None:
-        protections.append({
-            "method": "MaxDrawdown",
-            "lookback_period_candles": int(risk_model.get('max_drawdown_lookback_candles', 96)),
-            "trade_limit": int(risk_model.get('max_drawdown_trade_limit', 20)),
-            "stop_duration_candles": int(cooldown or 12),
-            "max_allowed_drawdown": float(max_drawdown_pct) / 100.0,
-        })
-
-    return protections
-
-
-def run_backtest_phase(name: str, config_path: str, label: str, timerange: str):
-    spec = load_spec(name)
-    cost_model = get_cost_model(spec)
-    risk_model = get_risk_model(spec)
-    fee = cost_model.get('fee')
-    print(f"\n[{label}] 回测")
-    print(f"  时间范围: {timerange}")
-    if fee is not None:
-        print(f"  fee: {fee}")
-    if risk_model.get('max_open_trades') is not None:
-        print(f"  max_open_trades: {risk_model['max_open_trades']}")
-    if risk_model.get('max_drawdown_pct') is not None:
-        print(f"  max_drawdown_pct: {risk_model['max_drawdown_pct']}")
-    cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
-    if fee is not None:
-        cmd += f" --fee {fee}"
-    if build_protections(spec):
-        cmd += " --enable-protections"
-    os.system(cmd)
-
-
-def generate_strategy_v2(name: str, spec: dict) -> str:
-    class_name = strategy_class_name(name)
-    
-    trading_mode = spec.get('trading_mode', 'spot')
-    can_short = spec.get('can_short', False) if trading_mode == 'spot' else True
-    timeframe = spec.get('timeframe', '15m')
-    stoploss = spec.get('stoploss', -0.03)
-    minimal_roi = spec.get('minimal_roi', {"0": 0.01})
-    trailing_stop = spec.get('trailing_stop', True)
-    trailing_stop_positive = spec.get('trailing_stop_positive', 0.01)
-    trailing_stop_positive_offset = spec.get('trailing_stop_positive_offset', 0.015)
-    
-    added_params = set()
-    params_code = []
-    indicators_code = []
-    
-    factors = spec.get('factors', {})
-    
-    if factors.get('ma', {}).get('enabled', False):
-        ma = factors['ma']
-        param_name = 'ma_period'
-        params_code.append(f"    {param_name} = IntParameter({ma['range'][0]}, {ma['range'][1]}, default={ma['period']}, space=\"{ma.get('space', 'buy')}\")")
-        added_params.add(param_name)
-        ma_type = ma.get('type', 'SMA')
-        indicators_code.append(f"        dataframe['ma'] = ta.{ma_type}(dataframe['close'], timeperiod=self.ma_period.value)")
-    
-    if factors.get('rsi', {}).get('enabled', False):
-        rsi = factors['rsi']
-        param_name = 'rsi_period'
-        params_code.append(f"    {param_name} = IntParameter({rsi['range'][0]}, {rsi['range'][1]}, default={rsi['period']}, space=\"{rsi.get('space', 'buy')}\")")
-        added_params.add(param_name)
-        indicators_code.append(f"        dataframe['rsi'] = ta.RSI(dataframe['close'], timeperiod=self.rsi_period.value)")
-    
-    if factors.get('rsi_oversold', {}).get('enabled', False):
-        rsi_os = factors['rsi_oversold']
-        params_code.append(f"    rsi_oversold = DecimalParameter({rsi_os['range'][0]}, {rsi_os['range'][1]}, default={rsi_os['value']}, decimals=1, space=\"{rsi_os.get('space', 'buy')}\")")
-        added_params.add('rsi_oversold')
-    
-    if factors.get('rsi_overbought', {}).get('enabled', False):
-        rsi_ob = factors['rsi_overbought']
-        params_code.append(f"    rsi_overbought = DecimalParameter({rsi_ob['range'][0]}, {rsi_ob['range'][1]}, default={rsi_ob['value']}, decimals=1, space=\"{rsi_ob.get('space', 'sell')}\")")
-        added_params.add('rsi_overbought')
-    
-    if factors.get('bb', {}).get('enabled', False):
-        bb = factors['bb']
-        params_code.append(f"    bb_period = IntParameter(10, 50, default={bb['period']}, space=\"buy\")")
-        added_params.add('bb_period')
-        std_range = bb.get('std_range', [1.5, 3.0])
-        params_code.append(f"    bb_std = DecimalParameter({std_range[0]}, {std_range[1]}, default={bb.get('std', 2.0)}, decimals=1, space=\"buy\")")
-        added_params.add('bb_std')
-        indicators_code.append(f"        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe['close'], timeperiod=self.bb_period.value, nbdevup=self.bb_std.value, nbdevdn=self.bb_std.value)")
-    
-    if factors.get('volume', {}).get('enabled', False):
-        vol = factors['volume']
-        params_code.append(f"    volume_ma_period = IntParameter(10, 30, default={vol['ma_period']}, space=\"buy\")")
-        added_params.add('volume_ma_period')
-        params_code.append(f"    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default={vol['ratio_threshold']}, decimals=1, space=\"buy\")")
-        added_params.add('volume_ratio_threshold')
-        indicators_code.append(f"        dataframe['volume_ma'] = dataframe['volume'].rolling(window=self.volume_ma_period.value).mean()")
-        indicators_code.append(f"        dataframe['volume_ratio'] = dataframe['volume'] / dataframe['volume_ma']")
-    
-    if factors.get('macd', {}).get('enabled', False):
-        macd = factors['macd']
-        params_code.append(f"    macd_fast = IntParameter(5, 15, default={macd['fast']}, space=\"buy\")")
-        params_code.append(f"    macd_slow = IntParameter(15, 35, default={macd['slow']}, space=\"buy\")")
-        params_code.append(f"    macd_signal = IntParameter(5, 15, default={macd['signal']}, space=\"buy\")")
-        indicators_code.append(f"        dataframe['macd'], dataframe['macd_signal'], dataframe['macd_hist'] = ta.MACD(dataframe['close'], fastperiod=self.macd_fast.value, slowperiod=self.macd_slow.value, signalperiod=self.macd_signal.value)")
-    
-    for ind in spec.get('derived_indicators', []):
-        ind_name = ind['name']
-        formula = ind.get('formula', '')
-        indicators_code.append(f"        dataframe['{ind_name}'] = {formula}")
-    
-    entry = spec.get('entry_conditions', {})
-    long_entry = entry.get('long', 'False').replace('\n', ' ').replace('  ', ' ')
-    short_entry = entry.get('short', 'False').replace('\n', ' ').replace('  ', ' ')
-    
-    exit_cond = spec.get('exit_conditions', {})
-    long_exit = exit_cond.get('long', 'False').replace('\n', ' ').replace('  ', ' ')
-    short_exit = exit_cond.get('short', 'False').replace('\n', ' ').replace('  ', ' ')
-    protections = pprint.pformat(build_protections(spec), indent=8, sort_dicts=False)
-    
-    code = f'''"""
-{spec.get('description', name)} V{spec.get('version', '1.0')} - Auto-generated strategy
-Trading Mode: {trading_mode}
-"""
-
-import numpy as np
-import pandas as pd
-from pandas import DataFrame
-import talib as ta
-
-from freqtrade.strategy import (
-    IStrategy,
-    DecimalParameter,
-    IntParameter,
-)
-
-
-class {class_name}(IStrategy):
-    INTERFACE_VERSION = 3
-    
-    can_short = {can_short}
-    timeframe = "{timeframe}"
-    
-    stoploss = {stoploss}
-    minimal_roi = {json.dumps(minimal_roi)}
-    
-    trailing_stop = {trailing_stop}
-    trailing_stop_positive = {trailing_stop_positive}
-    trailing_stop_positive_offset = {trailing_stop_positive_offset}
-    
-    process_only_new_candles = True
-    use_exit_signal = True
-    exit_profit_only = False
-    ignore_roi_if_entry_signal = False
-    
-{chr(10).join(params_code)}
-    
-    startup_candle_count = 300
-    
-    order_types = {{
-        "entry": "limit",
-        "exit": "limit",
-        "stoploss": "market",
-        "stoploss_on_exchange": False,
-    }}
-    
-    order_time_in_force = {{"entry": "GTC", "exit": "GTC"}}
-
-    @property
-    def protections(self):
-        return {protections}
-    
-    def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-{chr(10).join(indicators_code)}
-        return dataframe
-    
-    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe['enter_long'] = 0
-        dataframe['enter_short'] = 0
-        
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
-        
-        long_condition = {long_entry}
-        dataframe.loc[long_condition, 'enter_long'] = 1
-        
-        short_condition = {short_entry}
-        dataframe.loc[short_condition, 'enter_short'] = 1
-        
-        return dataframe
-    
-    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe['exit_long'] = 0
-        dataframe['exit_short'] = 0
-        
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
-        
-        exit_long_condition = {long_exit}
-        dataframe.loc[exit_long_condition, 'exit_long'] = 1
-        
-        exit_short_condition = {short_exit}
-        dataframe.loc[exit_short_condition, 'exit_short'] = 1
-        
-        return dataframe
-'''
-    
-    return code
-
-
-def generate_strategy(name: str, spec: dict) -> str:
-    return generate_strategy_v2(name, spec)
-    
-    can_short = spec.get('can_short', False)
-    timeframe = spec.get('timeframe', '15m')
-    stoploss = spec.get('stoploss', -0.03)
-    minimal_roi = spec.get('minimal_roi', {"0": 0.01})
-    trailing_stop = spec.get('trailing_stop', True)
-    trailing_stop_positive = spec.get('trailing_stop_positive', 0.01)
-    trailing_stop_positive_offset = spec.get('trailing_stop_positive_offset', 0.015)
-    
-    added_params = set()
-    params_code = []
-    indicators_code = []
-    
-    for ind in spec.get('indicators', []):
-        ind_name = ind['name'].lower()
-        ind_type = ind.get('type', 'SMA')
-        params = ind.get('params', [10, 50, 20])
-        
-        if ind_type in ['SMA', 'EMA', 'WMA']:
-            param_name = f"{ind_name}_period"
-            if param_name not in added_params:
-                params_code.append(f"    {param_name} = IntParameter({params[0]}, {params[1]}, default={params[2]}, space=\"buy\")")
-                added_params.add(param_name)
-            indicators_code.append(f"        dataframe['{ind_name}'] = ta.{ind_type}(dataframe['close'], timeperiod=self.{param_name}.value)")
-        elif ind_type == 'RSI':
-            param_name = f"{ind_name}_period"
-            if param_name not in added_params:
-                params_code.append(f"    {param_name} = IntParameter({params[0]}, {params[1]}, default={params[2]}, space=\"buy\")")
-                added_params.add(param_name)
-            indicators_code.append(f"        dataframe['{ind_name}'] = ta.RSI(dataframe['close'], timeperiod=self.{param_name}.value)")
-        elif ind_type == 'BB':
-            if 'bb_period' not in added_params:
-                params_code.append(f"    bb_period = IntParameter({params[0]}, {params[1]}, default={params[2]}, space=\"buy\")")
-                added_params.add('bb_period')
-            std_params = ind.get('std', [1.5, 3.0, 2.0])
-            if 'bb_std' not in added_params:
-                params_code.append(f"    bb_std = DecimalParameter({std_params[0]}, {std_params[1]}, default={std_params[2]}, decimals=1, space=\"buy\")")
-                added_params.add('bb_std')
-            indicators_code.append(f"        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe['close'], timeperiod=self.bb_period.value, nbdevup=self.bb_std.value, nbdevdn=self.bb_std.value)")
-    
-    for ind in spec.get('derived_indicators', []):
-        ind_name = ind['name']
-        formula = ind.get('formula', '')
-        indicators_code.append(f"        dataframe['{ind_name}'] = {formula}")
-    
-    entry = spec.get('entry_conditions', {})
-    long_entry = entry.get('long', 'False').replace('\n', ' ').replace('  ', ' ')
-    short_entry = entry.get('short', 'False').replace('\n', ' ').replace('  ', ' ')
-    
-    exit_cond = spec.get('exit_conditions', {})
-    long_exit = exit_cond.get('long', 'False').replace('\n', ' ').replace('  ', ' ')
-    short_exit = exit_cond.get('short', 'False').replace('\n', ' ').replace('  ', ' ')
-    
-    params = spec.get('params', {})
-    for pname, pdata in params.items():
-        if pname not in added_params:
-            if 'rsi_oversold' in pname or 'rsi_overbought' in pname:
-                params_code.append(f"    {pname} = DecimalParameter({pdata['min']}, {pdata['max']}, default={pdata['default']}, decimals=1, space=\"buy\" if 'oversold' in '{pname}' else \"sell\")")
-            else:
-                params_code.append(f"    {pname} = IntParameter({pdata['min']}, {pdata['max']}, default={pdata['default']}, space=\"buy\")")
-            added_params.add(pname)
-    
-    code = f'''"""
-{spec.get('description', name)} - Auto-generated strategy
-"""
-
-import numpy as np
-import pandas as pd
-from pandas import DataFrame
-import talib as ta
-
-from freqtrade.strategy import (
-    IStrategy,
-    DecimalParameter,
-    IntParameter,
-)
-
-
-class {class_name}(IStrategy):
-    INTERFACE_VERSION = 3
-    
-    can_short = {can_short}
-    timeframe = "{timeframe}"
-    
-    stoploss = {stoploss}
-    minimal_roi = {json.dumps(minimal_roi)}
-    
-    trailing_stop = {trailing_stop}
-    trailing_stop_positive = {trailing_stop_positive}
-    trailing_stop_positive_offset = {trailing_stop_positive_offset}
-    
-    process_only_new_candles = True
-    use_exit_signal = True
-    exit_profit_only = False
-    ignore_roi_if_entry_signal = False
-    
-{chr(10).join(params_code)}
-    
-    startup_candle_count = 300
-    
-    order_types = {{
-        "entry": "limit",
-        "exit": "limit",
-        "stoploss": "market",
-        "stoploss_on_exchange": False,
-    }}
-    
-    order_time_in_force = {{"entry": "GTC", "exit": "GTC"}}
-    
-    def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-{chr(10).join(indicators_code)}
-        return dataframe
-    
-    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe['enter_long'] = 0
-        dataframe['enter_short'] = 0
-        
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
-        
-        long_condition = {long_entry}
-        dataframe.loc[long_condition, 'enter_long'] = 1
-        
-        short_condition = {short_entry}
-        dataframe.loc[short_condition, 'enter_short'] = 1
-        
-        return dataframe
-    
-    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe['exit_long'] = 0
-        dataframe['exit_short'] = 0
-        
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
-        
-        exit_long_condition = {long_exit}
-        dataframe.loc[exit_long_condition, 'exit_long'] = 1
-        
-        exit_short_condition = {short_exit}
-        dataframe.loc[exit_short_condition, 'exit_short'] = 1
-        
-        return dataframe
-'''
-    
-    return code
 
 
 def cmd_list(args):
@@ -754,11 +43,8 @@ def cmd_list(args):
         name = f.stem
         spec = load_spec(name)
         ensure_default_profile(name, spec)
-        active = get_active_profile_name(name, spec)
-        profiles = sorted(
-            [p.stem for p in profile_dir(name).glob("*.yaml") if not p.name.startswith("_")]
-        )
-        print(f"  - {name}: active={active}, profiles={profiles}")
+        active, profiles = list_profiles(name, spec)
+        print(f"  - {name}: active={active}, profiles={[profile['name'] for profile in profiles]}")
     
     print()
 
@@ -789,25 +75,15 @@ def cmd_backtest(args):
     config_path = get_config_path(spec)
     cost_model = get_cost_model(spec)
     risk_model = get_risk_model(spec)
-    
-    print(f"运行回测: {name}")
-    print(f"  阶段: {phase}")
-    print(f"  时间范围: {timerange}")
-    if cost_model.get('fee') is not None:
-        print(f"  fee: {cost_model['fee']}")
-    if cost_model.get('slippage_bps') is not None:
-        print(f"  slippage_bps: {cost_model['slippage_bps']} (当前未自动注入 Freqtrade CLI)")
-    if cost_model.get('funding_rate_included') is False:
-        print(f"  funding_rate: 未纳入")
-    if risk_model:
-        print(f"  风控边界: max_open_trades={risk_model.get('max_open_trades')}, max_daily_loss_pct={risk_model.get('max_daily_loss_pct')}, max_drawdown_pct={risk_model.get('max_drawdown_pct')}")
-    
-    cmd = f"freqtrade backtesting -c {config_path} -s {name} --timerange {timerange}"
-    if cost_model.get('fee') is not None:
-        cmd += f" --fee {cost_model['fee']}"
-    if build_protections(spec):
-        cmd += " --enable-protections"
-    os.system(cmd)
+    run_backtest(
+        strategy_name=name,
+        phase=phase,
+        timerange=timerange,
+        config_path=config_path,
+        cost_model=cost_model,
+        risk_model=risk_model,
+        enable_protections=bool(build_protections(spec)),
+    )
 
 
 def cmd_validate(args):
@@ -823,8 +99,19 @@ def cmd_validate(args):
     print(f"  validation: {timeranges['validation']}")
     print(f"  test: {timeranges['test']}")
 
+    cost_model = get_cost_model(spec)
+    risk_model = get_risk_model(spec)
+    enable_protections = bool(build_protections(spec))
     for phase in ["train", "validation", "test"]:
-        run_backtest_phase(name, config_path, phase.upper(), timeranges[phase])
+        run_backtest_phase(
+            strategy_name=name,
+            config_path=config_path,
+            label=phase.upper(),
+            timerange=timeranges[phase],
+            fee=cost_model.get("fee"),
+            risk_model=risk_model,
+            enable_protections=enable_protections,
+        )
 
 
 def cmd_optimize(args):
@@ -847,18 +134,18 @@ def cmd_optimize(args):
         print(f"  fee: {cost_model['fee']}")
     if risk_model:
         print(f"  风控边界: max_open_trades={risk_model.get('max_open_trades')}, max_daily_loss_pct={risk_model.get('max_daily_loss_pct')}, max_drawdown_pct={risk_model.get('max_drawdown_pct')}")
-    
-    cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timerange} --epochs {epochs} -j 4"
-    if opt_config.get('hyperopt_loss'):
-        cmd += f" --hyperopt-loss {opt_config['hyperopt_loss']}"
-    if cost_model.get('fee') is not None:
-        cmd += f" --fee {cost_model['fee']}"
-    if build_protections(spec):
-        cmd += " --enable-protections"
-    
-    os.system(cmd)
-    
-    result_file = STRATEGY_DIR / f"auto_{name}.json"
+
+    run_hyperopt(
+        strategy_name=name,
+        epochs=epochs,
+        timerange=timerange,
+        config_path=config_path,
+        hyperopt_loss=opt_config.get("hyperopt_loss"),
+        fee=cost_model.get("fee"),
+        enable_protections=bool(build_protections(spec)),
+    )
+
+    result_file = runtime_param_snapshot_path(name)
     if result_file.exists():
         print(f"\n优化参数已保存到: {result_file}")
 
@@ -879,21 +166,43 @@ def cmd_run(args):
     epochs = opt_config.get('epochs', 200)
     timeranges = get_timeranges(spec)
     config_path = get_config_path(spec)
+    cost_model = get_cost_model(spec)
+    risk_model = get_risk_model(spec)
+    enable_protections = bool(build_protections(spec))
     
     print(f"[2/4] 训练集参数优化 (epochs={epochs})...")
-    cmd = f"freqtrade hyperopt -c {config_path} -s {name} --timerange {timeranges['train']} --epochs {epochs} -j 4"
-    if opt_config.get('hyperopt_loss'):
-        cmd += f" --hyperopt-loss {opt_config['hyperopt_loss']}"
-    if build_protections(spec):
-        cmd += " --enable-protections"
-    os.system(cmd)
+    run_hyperopt(
+        strategy_name=name,
+        epochs=epochs,
+        timerange=timeranges["train"],
+        config_path=config_path,
+        hyperopt_loss=opt_config.get("hyperopt_loss"),
+        fee=cost_model.get("fee"),
+        enable_protections=enable_protections,
+    )
     print()
     
     print("[3/4] 验证集回测...")
-    run_backtest_phase(name, config_path, "VALIDATION", timeranges['validation'])
+    run_backtest_phase(
+        strategy_name=name,
+        config_path=config_path,
+        label="VALIDATION",
+        timerange=timeranges["validation"],
+        fee=cost_model.get("fee"),
+        risk_model=risk_model,
+        enable_protections=enable_protections,
+    )
     
     print("\n[4/4] 测试集回测...")
-    run_backtest_phase(name, config_path, "TEST", timeranges['test'])
+    run_backtest_phase(
+        strategy_name=name,
+        config_path=config_path,
+        label="TEST",
+        timerange=timeranges["test"],
+        fee=cost_model.get("fee"),
+        risk_model=risk_model,
+        enable_protections=enable_protections,
+    )
     
     print("\n=== 完成 ===")
 
@@ -906,74 +215,18 @@ def cmd_config(args):
     active_profile = load_profile(name, spec)
     
     if args.list:
-        print(f"\n=== {name} 配置 ===")
-        print(f"\nActive profile: {active_profile['profile_name']} ({active_profile.get('status', 'draft')})")
-        print(f"\n交易模式: {spec.get('trading_mode', 'spot')}")
-        print(f"时间框架: {spec.get('timeframe')}")
-        print(f"支持做空: {spec.get('can_short')}")
-        
-        print("\n--- 因子配置 ---")
-        factors = spec.get('factors', {})
-        for fname, fconfig in factors.items():
-            if fconfig.get('enabled', False):
-                print(f"\n{fname}:")
-                if 'range' in fconfig:
-                    print(f"  范围: {fconfig['range']}")
-                if 'value' in fconfig:
-                    print(f"  默认值: {fconfig['value']}")
-                if 'period' in fconfig:
-                    print(f"  周期: {fconfig['period']}")
-        
-        print("\n--- 当前默认参数基线 ---")
-        factors = spec.get('factors', {})
-        for key, (factor_name, field_name) in PARAM_FACTOR_MAP.items():
-            factor = factors.get(factor_name, {})
-            if field_name in factor:
-                print(f"  {key}: {factor[field_name]}")
-
-        print("\n--- 当前 active profile 覆盖值 ---")
-        pprint.pprint(active_profile.get("overrides", {}), sort_dicts=False)
-
-        print("\n--- 风控模型 ---")
-        risk_model = get_risk_model(spec)
-        for key, value in risk_model.items():
-            if key != "notes":
-                print(f"  {key}: {value}")
-        
-        print()
+        print_config(name, spec, active_profile)
         return
     
     if args.set:
         key, value = args.set
-        try:
-            value = float(value)
-        except ValueError:
-            pass
-        
-        if key not in PARAM_FACTOR_MAP:
-            print(f"错误: 暂不支持设置参数 {key}")
-            print(f"支持的参数: {', '.join(PARAM_FACTOR_MAP.keys())}")
-            sys.exit(1)
-
-        factor_name, field_name = PARAM_FACTOR_MAP[key]
-        if 'factors' not in spec or factor_name not in spec['factors']:
-            print(f"错误: 规范中找不到参数对应的因子 {factor_name}")
-            sys.exit(1)
-
-        spec['factors'][factor_name][field_name] = value
-        
-        spec_file = SPEC_DIR / f"{name}.yaml"
-        with open(spec_file, 'w', encoding='utf-8') as f:
-            yaml.dump(spec, f, allow_unicode=True, default_flow_style=False)
-        save_profile(name, default_profile_payload(name, spec))
+        value = set_default_config_value(name, spec, key, value)
         
         print(f"已设置默认参数 {key} = {value}")
         print("请重新生成策略: generate", name)
         return
     
-    print(f"用法:")
-    print(f"  python cli.py config {name} --list      # 列出配置")
-    print(f"  python cli.py config {name} --set ma_period 200  # 设置参数")
+    print_config_usage(name)
 
 
 def cmd_profile(args):
@@ -982,12 +235,11 @@ def cmd_profile(args):
     ensure_default_profile(name, spec)
 
     if args.profile_command == "list":
-        active = get_active_profile_name(name, spec)
+        _, profiles = list_profiles(name, spec)
         print(f"\n=== {name} profiles ===")
-        for p in sorted([p.stem for p in profile_dir(name).glob("*.yaml") if not p.name.startswith("_")]):
-            profile = load_profile(name, spec, p)
-            mark = "*" if p == active else " "
-            print(f"{mark} {p}  status={profile.get('status', 'draft')}  source={profile.get('source', '-')}")
+        for profile in profiles:
+            mark = "*" if profile["active"] else " "
+            print(f"{mark} {profile['name']}  status={profile['status']}  source={profile['source']}")
         print()
         return
 
@@ -998,30 +250,19 @@ def cmd_profile(args):
 
     if args.profile_command == "create":
         from_profile_name = args.from_profile or get_active_profile_name(name, spec)
-        source_profile = load_profile(name, spec, from_profile_name)
-        new_profile = copy.deepcopy(source_profile)
-        new_profile["profile_name"] = args.profile_name
-        new_profile["status"] = "candidate"
-        new_profile["source"] = f"profile:{from_profile_name}"
-        ppath = save_profile(name, new_profile)
+        ppath = create_profile(name, spec, args.profile_name, from_profile_name)
         print(f"已创建 profile: {ppath}")
         return
 
     if args.profile_command == "activate":
-        profile = load_profile(name, spec, args.profile_name)
-        set_active_profile(name, spec, args.profile_name)
-        runtime_json = sync_runtime_profile(name, apply_profile_overrides(spec, profile), profile)
+        runtime_json = activate_profile(name, spec, args.profile_name)
         print(f"已激活 profile: {args.profile_name}")
         print(f"运行参数快照: {runtime_json}")
         return
 
     if args.profile_command == "promote":
-        profile = load_profile(name, spec, args.profile_name)
-        profile["status"] = args.to_status
-        save_profile(name, profile)
-        if args.to_status in {"paper_active", "live_active"}:
-            set_active_profile(name, spec, args.profile_name)
-            runtime_json = sync_runtime_profile(name, apply_profile_overrides(spec, profile), profile)
+        _, activated, runtime_json = promote_profile(name, spec, args.profile_name, args.to_status)
+        if activated:
             print(f"已晋级并激活 profile: {args.profile_name} -> {args.to_status}")
             print(f"运行参数快照: {runtime_json}")
             return
@@ -1029,126 +270,44 @@ def cmd_profile(args):
         return
 
     if args.profile_command == "import-hyperopt":
-        result = subprocess.run(
-            [
-                "freqtrade",
-                "hyperopt-show",
-                "-c",
-                str(CONFIG_DIR),
-                "--hyperopt-filename",
-                args.hyperopt_filename,
-                "--best",
-                "--print-json",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        json_line = None
-        for line in reversed(result.stdout.splitlines()):
-            line = line.strip()
-            if line.startswith("{") and line.endswith("}"):
-                json_line = line
-                break
-        if not json_line:
-            print("错误: 未能从 hyperopt-show 输出中解析 JSON 参数")
-            sys.exit(1)
-        params = json.loads(json_line)
-        profile = build_profile_from_hyperopt(
-            name,
-            args.profile_name,
-            args.hyperopt_filename,
-            params,
-        )
-        ppath = save_profile(name, profile)
+        ppath = import_hyperopt_profile(name, CONFIG_DIR, args.profile_name, args.hyperopt_filename)
         print(f"已从 hyperopt 结果导入 candidate profile: {ppath}")
         return
 
     if args.profile_command == "validate":
-        profile = load_profile(name, spec, args.profile_name)
-        effective_spec = apply_profile_overrides(spec, profile)
-        ensure_generated_strategy(name, effective_spec)
-        sync_runtime_profile(name, effective_spec, profile)
-
-        timeranges = get_timeranges(effective_spec)
-        timerange = args.timerange or timeranges["validation"]
-        config_path = get_config_path(effective_spec)
-        cost_model = get_cost_model(effective_spec)
-        PROFILE_BT_RESULT_DIR.mkdir(parents=True, exist_ok=True)
-        before = {p.name for p in PROFILE_BT_RESULT_DIR.glob("*.zip")}
-
-        cmd = [
-            "freqtrade",
-            "backtesting",
-            "-c",
-            config_path,
-            "-s",
-            strategy_class_name(name),
-            "--timerange",
-            timerange,
-            "--export",
-            "trades",
-            "--backtest-directory",
-            str(PROFILE_BT_RESULT_DIR),
-        ]
-        if cost_model.get("fee") is not None:
-            cmd.extend(["--fee", str(cost_model["fee"])])
-        if build_protections(effective_spec):
-            cmd.append("--enable-protections")
-
-        subprocess.run(cmd, check=True)
-
-        try:
-            latest_zip = latest_created_backtest_zip(before, PROFILE_BT_RESULT_DIR)
-            metrics = normalize_backtest_metrics(read_backtest_summary(latest_zip, strategy_class_name(name)))
-        except RuntimeError as exc:
-            print(f"错误: {exc}")
-            sys.exit(1)
-
-        min_trades = args.min_trades
-        min_profit = args.min_profit
-        min_profit_factor = args.min_profit_factor
-        max_drawdown_limit = args.max_drawdown
-
-        passed = (
-            metrics["total_trades"] >= min_trades
-            and metrics["profit_total"] >= min_profit
-            and metrics["profit_factor"] >= min_profit_factor
-            and metrics["max_drawdown_account"] <= max_drawdown_limit
+        validation_result, promoted = validate_profile(
+            name=name,
+            spec=spec,
+            profile_name=args.profile_name,
+            ensure_generated_strategy=ensure_generated_strategy,
+            profile_bt_result_dir=PROFILE_BT_RESULT_DIR,
+            timerange_override=args.timerange,
+            min_trades=args.min_trades,
+            min_profit=args.min_profit,
+            min_profit_factor=args.min_profit_factor,
+            max_drawdown=args.max_drawdown,
+            promote_on_pass=args.promote_on_pass,
         )
+        metrics = validation_result["metrics"]
+        gate = validation_result["gate"]
+        passed = validation_result["passed"]
 
-        print(f"Validation profile: {profile['profile_name']}")
-        print(f"Timerange: {timerange}")
-        print(f"Backtest result: {latest_zip}")
+        print(f"Validation profile: {validation_result['profile_name']}")
+        print(f"Timerange: {validation_result['timerange']}")
+        print(f"Backtest result: {validation_result['backtest_zip']}")
         print(f"total_trades={metrics['total_trades']}")
         print(f"profit_total={metrics['profit_total']:.6f}")
         print(f"profit_total_abs={metrics['profit_total_abs']:.6f} {metrics['stake_currency']}")
         print(f"profit_factor={metrics['profit_factor']:.4f}")
         print(f"max_drawdown_account={metrics['max_drawdown_account']:.4f}")
         print(
-            f"Gate: min_trades>={min_trades}, min_profit>={min_profit}, "
-            f"min_profit_factor>={min_profit_factor}, max_drawdown<={max_drawdown_limit}"
+            f"Gate: min_trades>={gate['min_trades']}, min_profit>={gate['min_profit']}, "
+            f"min_profit_factor>={gate['min_profit_factor']}, max_drawdown<={gate['max_drawdown']}"
         )
         print(f"Validation status: {'PASS' if passed else 'FAIL'}")
 
-        profile.setdefault("validation", {})
-        profile["validation"]["last_result"] = {
-            "timerange": timerange,
-            "backtest_zip": str(latest_zip),
-            "metrics": metrics,
-            "gate": {
-                "min_trades": min_trades,
-                "min_profit": min_profit,
-                "min_profit_factor": min_profit_factor,
-                "max_drawdown": max_drawdown_limit,
-            },
-            "passed": passed,
-        }
-        if passed and args.promote_on_pass:
-            profile["status"] = "validated"
-        save_profile(name, profile)
-        if passed and args.promote_on_pass:
-            print(f"已自动晋级 profile -> validated: {profile['profile_name']}")
+        if promoted:
+            print(f"已自动晋级 profile -> validated: {validation_result['profile_name']}")
         if not passed:
             sys.exit(2)
         return

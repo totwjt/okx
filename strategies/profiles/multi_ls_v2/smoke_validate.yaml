@@ -1,8 +1,8 @@
-profile_name: candidate_test
+profile_name: smoke_validate
 strategy_name: multi_ls_v2
 status: validated
 source: profile:paper_baseline
-updated_at: '2026-04-02T09:04:10.866700+00:00'
+updated_at: '2026-04-07T07:10:12.335475+00:00'
 overrides:
   factors:
     ma:
@@ -27,8 +27,9 @@ overrides:
     max_open_trades: 3
 validation:
   last_result:
+    profile_name: smoke_validate
     timerange: 20251001-20251007
-    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-02_09-04-10.zip
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-07_07-10-11.zip
     metrics:
       total_trades: 0
       profit_total: 0.0

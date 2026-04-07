@@ -15,6 +15,14 @@ AI 量化交易策略管理工具，当前聚焦 OKX 合约多空切换策略，
 3. `promotion`
 通过 CLI 把 profile 从 `candidate` 晋级到 `validated` / `paper_active` / `live_active`。
 
+推荐候选参数流程：
+
+1. `profile create` 创建 candidate
+2. `profile validate` 在 `validation_timerange` 上回测 candidate
+3. 查看 PASS / FAIL 和写回 profile 的 `validation.last_result`
+4. 通过后用 `--promote-on-pass` 或手动 `profile promote ... validated`
+5. 再按需要晋级到 `paper_active` / `live_active`
+
 ## 目录结构
 
 ```
@@ -62,6 +70,17 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile acti
 # 晋级 profile
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile promote multi_ls_v2 paper_baseline paper_active
 
+# 对 candidate profile 跑 validation gate
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile validate multi_ls_v2 candidate_test
+
+# 自定义 gate，并在通过时自动晋级到 validated
+docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile validate multi_ls_v2 candidate_test \
+  --min-trades 10 \
+  --min-profit 0.02 \
+  --min-profit-factor 1.1 \
+  --max-drawdown 0.20 \
+  --promote-on-pass
+
 # 查看策略配置
 docker exec freqtrade python /freqtrade/user_data/strategies/cli.py config multi_ls_v2 --list
 
@@ -97,6 +116,29 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 - 不要直接用测试集调参
 - 每次调参先看 validation，再看 test
 - `run` 命令默认执行完整三段流程
+- `profile validate` 只针对 `validation_timerange` 跑 gate，适合 candidate profile 快速筛选
+
+`profile validate` 当前会：
+
+- 使用目标 profile 覆盖 spec 并同步运行参数快照
+- 调用 Freqtrade 在 validation timerange 上回测
+- 解析回测 zip 内 JSON 指标
+- 输出 `PASS` / `FAIL`
+- 把最近一次验证结果写回对应 profile 的 `validation.last_result`
+- 在传入 `--promote-on-pass` 且通过时自动把 profile 状态更新为 `validated`
+
+默认 gate 阈值：
+
+- `--min-trades 1`
+- `--min-profit 0.0`
+- `--min-profit-factor 1.0`
+- `--max-drawdown 0.30`
+
+返回码约定：
+
+- `0`: 校验通过
+- `2`: 校验未通过 gate
+- 其他非 `0`: 命令执行失败，例如回测失败或结果解析失败
 
 ## 成本模型
 

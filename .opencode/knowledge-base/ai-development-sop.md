@@ -121,3 +121,24 @@
 3. Freqtrade protections 与 YAML 风控边界联动
 4. 运行监控与告警
 5. 必要时再评估自定义执行层
+
+## 8. 双线程协作
+
+当前项目允许使用双线程协作，但职责必须固定：
+
+- 线程一只做 profile 层持续优化与验证闭环
+- 线程二只在收到线程一信号后处理 spec 层结构修改
+
+注意：
+
+- 这不是所有线程的默认要求
+- 只有明确加载线程专用任务文件的两个线程才使用这套机制
+- 普通功能开发线程不需要进入 signal 流程
+- 双线程的 `progress/signal` 必须按 `strategy_slug` 分目录隔离；切策略时必须新建上下文，不能复用旧策略 current 内容
+
+详细规则见：
+
+- `docs/operations/dual-thread-sop.md`
+- `docs/operations/thread-signal-spec.md`
+- `research/coordination/thread1-profile-optimization.md`
+- `research/coordination/thread2-spec-optimization.md`

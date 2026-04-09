@@ -1,0 +1,28 @@
+{
+  "signal_type": "T1_TO_T2",
+  "created_at": "2026-04-09T10:30:00+08:00",
+  "from_thread": "thread1_profile_optimization",
+  "to_thread": "thread2_spec_optimization",
+  "strategy_name": "GridLsV1Strategy",
+  "strategy_slug": "grid_ls_v1",
+  "context_id": "grid_ls_v1_20260409_round01",
+  "active_profile": "paper_baseline",
+  "candidate_profile": "candidate_more_signals",
+  "summary": "Profile layer could not solve sparse entries; escalation to spec layer requested.",
+  "status": "OPEN",
+  "problem_class": "ENTRY_TOO_SPARSE",
+  "evidence": [
+    "validation trades too low across multiple candidates",
+    "paper run sample count remains near zero"
+  ],
+  "attempted_profile_changes": [
+    "reduced ma period",
+    "relaxed rsi thresholds"
+  ],
+  "why_profile_layer_failed": "Signal density remains too low after parameter-only changes.",
+  "requested_spec_changes": [
+    "review entry condition strictness",
+    "review trend filter structure"
+  ],
+  "expected_outcome": "Increase natural sample density without removing directional discipline."
+}

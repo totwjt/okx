@@ -18,6 +18,9 @@ Usage:
   execution/scripts/simctl logs [tail]
   execution/scripts/simctl ping
   execution/scripts/simctl summary
+  execution/scripts/simctl baseline-report [log_tail]
+  execution/scripts/simctl paper-run-start <run_name> [notes]
+  execution/scripts/simctl paper-run-report <run_name>
   execution/scripts/simctl show-config
   execution/scripts/simctl status
   execution/scripts/simctl balance
@@ -31,6 +34,7 @@ Usage:
   execution/scripts/simctl strategy-sample-status
   execution/scripts/simctl strategy-natural-trades [limit]
   execution/scripts/simctl strategy-review-gate [target_samples]
+  execution/scripts/simctl strategy-context-init <strategy_slug> <strategy_name> [context_id]
   execution/scripts/simctl force-enter <pair> <long|short> [stake_amount] [leverage]
   execution/scripts/simctl force-exit <trade_id>
   execution/scripts/simctl db-last-trades [limit]
@@ -82,6 +86,17 @@ python_in_container() {
   shift || true
   require_container
   docker exec "$CONTAINER_NAME" python -c "$code" "$@"
+}
+
+current_strategy_name() {
+  require_container
+  local cmd_json strategy
+  cmd_json="$(docker inspect "$CONTAINER_NAME" --format '{{json .Config.Cmd}}' 2>/dev/null || true)"
+  strategy="$(printf '%s' "$cmd_json" | sed -n 's/.*"--strategy","\\([^"]*\\)".*/\\1/p')"
+  if [[ -z "$strategy" ]]; then
+    strategy="GridLsV1Strategy"
+  fi
+  printf '%s\n' "$strategy"
 }
 
 db_query() {
@@ -154,6 +169,131 @@ if status:
         side = 'short' if trade.get('is_short') else 'long'
         print(f\"- #{trade.get('trade_id')} {trade.get('pair')} {side} stake={trade.get('stake_amount')} pnl={trade.get('profit_abs')} ({trade.get('profit_pct')}%)\")
 " 
+    ;;
+  baseline-report)
+    tail_lines="${1:-200}"
+    python_in_container "
+import json, re, sqlite3, subprocess, sys, urllib.request
+from pathlib import Path
+
+base = '$API_BASE'
+auth = 'Basic ZnJlcXRyYWRlOmZyZXF0cmFkZQ=='
+tail_lines = int(sys.argv[1])
+config = json.loads(Path('/freqtrade/user_data/config.json').read_text())
+
+def get(path):
+    req = urllib.request.Request(
+        f'{base}/{path}',
+        headers={'Authorization': auth},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+def bool_status(ok):
+    return 'OK' if ok else 'CHECK'
+
+balance = get('balance')
+profit = get('profit')
+status = get('status')
+
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  count(*) as total_trades,
+  sum(case when is_open = 1 then 1 else 0 end) as open_trades,
+  sum(case when is_open = 0 then 1 else 0 end) as closed_trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_closed_trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then coalesce(close_profit_abs, 0) else 0 end) as natural_closed_pnl,
+  max(open_date) as last_open_date,
+  max(close_date) as last_close_date
+from trades
+''')
+trade_stats = dict(cur.fetchone())
+
+cur.execute('''
+select
+  strategy,
+  count(*) as trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_closed_trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then coalesce(close_profit_abs, 0) else 0 end) as natural_closed_pnl
+from trades
+group by strategy
+order by trades desc
+limit 3
+''')
+top_strategies = [dict(r) for r in cur.fetchall()]
+
+log_output = subprocess.run(
+    ['tail', '-n', str(tail_lines), '/freqtrade/user_data/logs/freqtrade.log'],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+log_text = log_output.stdout or ''
+pattern_map = {
+    'errors': r'(?im)\\bERROR\\b|Traceback',
+    'ws_disconnects': r'(?i)\\b1006\\b|watch_ohlcv|websocket.*(?:disconnect|timeout|closed)',
+    'timeouts': r'(?i)timed out|timeout',
+}
+pattern_counts = {name: len(re.findall(pattern, log_text)) for name, pattern in pattern_map.items()}
+
+print('REST baseline report')
+print(f\"Config dry_run: {config.get('dry_run')} [{bool_status(config.get('dry_run') is True)}]\")
+print(f\"Config enable_ws: {config.get('exchange', {}).get('enable_ws')} [{'OK' if config.get('exchange', {}).get('enable_ws') is False else 'CHECK'}]\")
+print(f\"Config trading_mode: {config.get('trading_mode')}\")
+print(f\"Config margin_mode: {config.get('margin_mode')}\")
+print(f\"API summary: balance={balance.get('total', 0):.6f} {balance.get('stake', 'USDT')} pnl={profit.get('profit_all_coin', 0):.6f} {balance.get('stake', 'USDT')} open_positions={len(status)} [{bool_status(True)}]\")
+print(f\"Trades: total={trade_stats.get('total_trades', 0) or 0} closed={trade_stats.get('closed_trades', 0) or 0} natural_closed={trade_stats.get('natural_closed_trades', 0) or 0}\")
+print(f\"Natural closed PnL: {(trade_stats.get('natural_closed_pnl', 0) or 0):.6f} {balance.get('stake', 'USDT')}\")
+print(f\"Last open trade: {trade_stats.get('last_open_date') or '-'}\")
+print(f\"Last closed trade: {trade_stats.get('last_close_date') or '-'}\")
+print(f\"Recent log scan ({tail_lines} lines): errors={pattern_counts['errors']} ws_disconnects={pattern_counts['ws_disconnects']} timeouts={pattern_counts['timeouts']}\")
+if top_strategies:
+    print('Top strategies in DB:')
+    for row in top_strategies:
+        print(f\"- {row.get('strategy')}: trades={row.get('trades', 0)} natural_closed={row.get('natural_closed_trades', 0) or 0} natural_closed_pnl={(row.get('natural_closed_pnl', 0) or 0):.6f} {balance.get('stake', 'USDT')}\")
+
+issues = []
+if config.get('dry_run') is not True:
+    issues.append('config dry_run is not true')
+if config.get('exchange', {}).get('enable_ws') is not False:
+    issues.append('config exchange.enable_ws is not false')
+if pattern_counts['errors'] > 0:
+    issues.append('recent logs contain ERROR/Traceback')
+if pattern_counts['ws_disconnects'] > 0:
+    issues.append('recent logs still show websocket-related disconnect signals')
+if trade_stats.get('natural_closed_trades', 0) in (None, 0):
+    issues.append('no natural closed trades yet')
+
+print('Verdict:')
+if issues:
+    print('CHECK')
+    for issue in issues:
+        print(f\"- {issue}\")
+else:
+    print('OK')
+    print('- REST baseline config is aligned and recent logs are quiet.')
+" "$tail_lines"
+    ;;
+  paper-run-start)
+    run_name="${1:-}"
+    notes="${2:-}"
+    if [[ -z "$run_name" ]]; then
+      echo "paper-run-start requires: <run_name> [notes]" >&2
+      exit 1
+    fi
+    strategy_name="$(current_strategy_name)"
+    python3 "$ROOT_DIR/execution/scripts/paper_run_report.py" start "$run_name" --strategy "$strategy_name" --notes "$notes"
+    ;;
+  paper-run-report)
+    run_name="${1:-}"
+    if [[ -z "$run_name" ]]; then
+      echo "paper-run-report requires: <run_name>" >&2
+      exit 1
+    fi
+    python3 "$ROOT_DIR/execution/scripts/paper_run_report.py" report "$run_name"
     ;;
   show-config)
     api_get "show_config"
@@ -311,10 +451,11 @@ for row in rows:
 "
     ;;
   strategy-sample-status)
+    strategy_name="$(current_strategy_name)"
     python_in_container "
-import sqlite3
+import sqlite3, sys
 
-strategy = 'MultiLsV2Strategy'
+strategy = sys.argv[1]
 conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
@@ -352,15 +493,16 @@ for r in recent:
     pnl = r['close_profit_abs']
     pnl_text = 'None' if pnl is None else f'{pnl:.6f}'
     print(f\"- #{r['id']} {r['pair']} open={r['is_open']} enter_tag={tag} exit_reason={r['exit_reason']} pnl={pnl_text}\")
-"
+" "$strategy_name"
     ;;
   strategy-natural-trades)
     limit="${1:-5}"
+    strategy_name="$(current_strategy_name)"
     python_in_container "
 import sqlite3, sys
 
-strategy = 'MultiLsV2Strategy'
-limit = int(sys.argv[1])
+strategy = sys.argv[1]
+limit = int(sys.argv[2])
 conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
@@ -377,10 +519,10 @@ limit ?
 ''', (strategy, limit))
 rows = cur.fetchall()
 if not rows:
-    print('No natural MultiLsV2Strategy samples yet.')
+    print(f'No natural {strategy} samples yet.')
     raise SystemExit(0)
 
-print('Natural MultiLsV2Strategy samples')
+print(f'Natural {strategy} samples')
 for r in rows:
     side = 'short' if r['is_short'] else 'long'
     pnl_abs = r['close_profit_abs']
@@ -391,15 +533,16 @@ for r in rows:
     print(f\"  open={r['open_date']} close={r['close_date']}\")
     print(f\"  stake={r['stake_amount']} open_rate={r['open_rate']} close_rate={r['close_rate']}\")
     print(f\"  pnl={pnl_abs_text} USDT ({pnl_pct_text}) reason={r['exit_reason']}\")
-" "$limit"
+" "$strategy_name" "$limit"
     ;;
   strategy-review-gate)
     target="${1:-10}"
+    strategy_name="$(current_strategy_name)"
     python_in_container "
 import sqlite3, sys
 
-strategy = 'MultiLsV2Strategy'
-target = int(sys.argv[1])
+strategy = sys.argv[1]
+target = int(sys.argv[2])
 conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
@@ -428,7 +571,80 @@ if natural_count >= target:
 else:
     print('Gate status: COLLECT_MORE_SAMPLES')
     print(f'Next action: keep simulator running; need {remaining} more natural samples.')
-" "$target"
+" "$strategy_name" "$target"
+    ;;
+  strategy-context-init)
+    strategy_slug="${1:-}"
+    strategy_name="${2:-}"
+    context_id="${3:-}"
+    if [[ -z "$strategy_slug" || -z "$strategy_name" ]]; then
+      echo "strategy-context-init requires: <strategy_slug> <strategy_name> [context_id]" >&2
+      exit 1
+    fi
+    if [[ -z "$context_id" ]]; then
+      context_id="${strategy_slug}_$(date -u +%Y%m%d_%H%M%S)"
+    fi
+
+    progress_root="$ROOT_DIR/research/coordination/progress"
+    signals_root="$ROOT_DIR/research/coordination/signals"
+    archive_root="$progress_root/archive"
+    strategy_progress_dir="$progress_root/$strategy_slug"
+    strategy_signal_dir="$signals_root/$strategy_slug"
+    ts="$(date -u +%Y%m%d_%H%M%S)"
+
+    mkdir -p "$archive_root" "$strategy_progress_dir" "$strategy_signal_dir"
+
+    for role in thread1 thread2; do
+      src="$strategy_progress_dir/${role}_current.md"
+      if [[ -f "$src" ]]; then
+        mv "$src" "$archive_root/${role}_${strategy_slug}_${ts}.md"
+      fi
+    done
+
+    cat > "$strategy_progress_dir/thread1_current.md" <<EOF
+# Thread 1 Current (${strategy_slug})
+
+- strategy_name: ${strategy_name}
+- strategy_slug: ${strategy_slug}
+- context_id: ${context_id}
+- current_task: INIT
+- current_goal: INIT
+- current_candidate: none
+- latest_action: initialized by simctl strategy-context-init
+- current_conclusion: waiting for first optimization round
+- next_action: create candidate from paper_baseline and run profile validate
+EOF
+
+    cat > "$strategy_progress_dir/thread2_current.md" <<EOF
+# Thread 2 Current (${strategy_slug})
+
+- strategy_name: ${strategy_name}
+- strategy_slug: ${strategy_slug}
+- context_id: ${context_id}
+- current_task: IDLE
+- source_signal: none
+- latest_action: initialized by simctl strategy-context-init
+- current_conclusion: waiting for T1_TO_T2 signal
+- next_action: read latest signal under research/coordination/signals/${strategy_slug}/
+EOF
+
+    if [[ ! -f "$strategy_signal_dir/README.md" ]]; then
+      cat > "$strategy_signal_dir/README.md" <<EOF
+# ${strategy_slug} signals
+
+Store \`T1_TO_T2\` / \`T2_TO_T1\` signal JSON files for \`${strategy_slug}\` in this directory.
+
+Filename format:
+\`YYYYMMDD_HHMMSS_${strategy_slug}_<signal_type>_<slug>.json\`
+EOF
+    fi
+
+    echo "Initialized strategy context."
+    echo "  strategy_slug: $strategy_slug"
+    echo "  strategy_name: $strategy_name"
+    echo "  context_id: $context_id"
+    echo "  progress_dir: $strategy_progress_dir"
+    echo "  signal_dir: $strategy_signal_dir"
     ;;
   force-enter)
     pair="${1:-}"

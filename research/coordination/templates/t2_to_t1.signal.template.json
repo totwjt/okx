@@ -1,0 +1,27 @@
+{
+  "signal_type": "T2_TO_T1",
+  "created_at": "2026-04-09T11:35:00+08:00",
+  "from_thread": "thread2_spec_optimization",
+  "to_thread": "thread1_profile_optimization",
+  "strategy_name": "GridLsV1Strategy",
+  "strategy_slug": "grid_ls_v1",
+  "context_id": "grid_ls_v1_20260409_round01",
+  "active_profile": "paper_baseline",
+  "summary": "Spec update completed. Thread 1 can restart candidate validation from the updated logic.",
+  "status": "DONE",
+  "source_signal": "20260409_103000_grid_ls_v1_T1_TO_T2_low_signal_density.json",
+  "spec_changes": [
+    "relaxed entry structure",
+    "adjusted trend filter"
+  ],
+  "affected_files": [
+    "strategies/spec/multi_ls_v2.yaml"
+  ],
+  "logic_rationale": "The prior entry condition was structurally too sparse for 15m sampling.",
+  "expected_tradeoff": "More signals, with a possible increase in false entries.",
+  "next_actions_for_thread_1": [
+    "generate strategy artifacts",
+    "create new candidate profile from current paper baseline",
+    "rerun validation and test"
+  ]
+}

@@ -1,0 +1,140 @@
+name: Grid-LS V1
+description: 网格均值回归策略 V1（RangeGrid + TrendPullback，支持标的波动变体）
+version: "1.0"
+
+trading_mode: futures
+margin_mode: isolated
+timeframe: 15m
+can_short: true
+
+stoploss: -0.08
+minimal_roi:
+  "0": 0.018
+  "120": 0.006
+  "360": 0.0
+trailing_stop: true
+trailing_stop_positive: 0.009
+trailing_stop_positive_offset: 0.016
+
+cost_model:
+  fee: 0.001
+  slippage_bps: 6
+  funding_rate_included: false
+  notes:
+    - 网格类信号成交密度高，优先关注 fee + slippage 联合影响
+
+risk_model:
+  max_open_trades: 4
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 18.0
+  max_consecutive_losses: 4
+  cooldown_candles_after_loss_streak: 8
+  protections_in_config_required: true
+
+factors:
+  ma:
+    enabled: true
+    period: 72
+    range: [30, 120]
+    space: buy
+    type: EMA
+  rsi:
+    enabled: true
+    period: 14
+    range: [7, 28]
+    space: buy
+  rsi_oversold:
+    enabled: true
+    value: 31
+    range: [18, 40]
+    space: buy
+  rsi_overbought:
+    enabled: true
+    value: 69
+    range: [60, 88]
+    space: sell
+  bb:
+    enabled: true
+    period: 48
+    std: 2.2
+    std_range: [1.6, 3.2]
+  volume:
+    enabled: true
+    ma_period: 24
+    ratio_threshold: 1.0
+  macd:
+    enabled: false
+    fast: 12
+    slow: 26
+    signal: 9
+
+derived_indicators:
+  - name: ema_fast
+    formula: ta.EMA(dataframe['close'], timeperiod=21)
+  - name: ema_slow
+    formula: ta.EMA(dataframe['close'], timeperiod=89)
+  - name: adx
+    formula: ta.ADX(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=14)
+  - name: atr
+    formula: ta.ATR(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=14)
+  - name: atr_pct
+    formula: dataframe['atr'] / dataframe['close'].replace(0, np.nan)
+  - name: bb_width
+    formula: (dataframe['bb_upper'] - dataframe['bb_lower']) / dataframe['bb_middle'].replace(0, np.nan)
+  - name: zscore
+    formula: (dataframe['close'] - dataframe['bb_middle']) / (dataframe['bb_upper'] - dataframe['bb_lower']).replace(0, np.nan)
+  - name: mean_revert_score
+    formula: ((dataframe['bb_middle'] - dataframe['close']) / dataframe['close'].replace(0, np.nan)) * 100
+
+entry_conditions:
+  long: |
+    (
+      (
+        (dataframe['adx'] <= 23) &
+        (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &
+        (dataframe['rsi'] <= rsi_oversold)
+      ) |
+      (
+        (dataframe['ema_fast'] > dataframe['ema_slow']) &
+        (dataframe['zscore'] <= -0.9) &
+        (dataframe['atr_pct'] <= 0.032)
+      )
+    ) &
+    (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value)
+  short: |
+    (
+      (
+        (dataframe['adx'] <= 23) &
+        (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &
+        (dataframe['rsi'] >= rsi_overbought)
+      ) |
+      (
+        (dataframe['ema_fast'] < dataframe['ema_slow']) &
+        (dataframe['zscore'] >= 0.9) &
+        (dataframe['atr_pct'] <= 0.032)
+      )
+    ) &
+    (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value)
+
+exit_conditions:
+  long: |
+    (
+      (dataframe['close'] >= dataframe['bb_middle']) |
+      ((dataframe['rsi'] >= 54) & (dataframe['zscore'] >= -0.1)) |
+      (dataframe['atr_pct'] >= 0.045)
+    )
+  short: |
+    (
+      (dataframe['close'] <= dataframe['bb_middle']) |
+      ((dataframe['rsi'] <= 46) & (dataframe['zscore'] <= 0.1)) |
+      (dataframe['atr_pct'] >= 0.045)
+    )
+
+optimization:
+  epochs: 260
+  hyperopt_loss: ShortTradeDurHyperOptLoss
+  timerange: 20250101-20250930
+
+train_timerange: 20250101-20250930
+validation_timerange: 20251001-20251130
+test_timerange: 20251201-

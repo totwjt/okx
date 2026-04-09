@@ -25,6 +25,16 @@
 - `research/`: 研究型验证脚本与报告，不等于 Freqtrade 官方回测结果
 - `apps/prototypes/freqtrade_bot/`: 原型级实时机器人，不是成熟 OMS/EMS
 
+当前策略主线只允许一条接入链：
+
+- `spec -> profile -> generated -> auto_json -> docker运行`
+
+补充约束：
+
+- `strategies/` 主目录不再放置独立手写实验策略
+- 历史策略与旧规范统一放到 `research/archive/`
+- 实验脚本放到 `research/experiments/`
+
 ## AI 修改原则
 
 - 如果任务是分析或审计，先核对目录和类名，再下判断。

@@ -9,6 +9,10 @@ cost_model:
 derived_indicators:
 - formula: dataframe['ma'].diff(3)
   name: ma_slope
+- formula: dataframe['rsi'].diff(2)
+  name: rsi_slope
+- formula: dataframe['close'].pct_change(2)
+  name: price_momentum
 description: 多空切换策略 V2 - 支持因子配置的参数化策略
 entry_conditions:
   long: '(dataframe[''close''] > dataframe[''ma'']) &
@@ -26,14 +30,26 @@ entry_conditions:
 
     '
 exit_conditions:
-  long: '(dataframe[''rsi''] > rsi_overbought) |
+  long: '((dataframe[''rsi''] > rsi_overbought) &
 
-    (dataframe[''close''] < dataframe[''ma''])
+    (dataframe[''rsi_slope''] < 0)) |
+
+    ((dataframe[''ma_slope''] <= 0) &
+
+    (dataframe[''price_momentum''] < 0) &
+
+    (dataframe[''rsi''] > 50))
 
     '
-  short: '(dataframe[''rsi''] < rsi_oversold) |
+  short: '((dataframe[''rsi''] < rsi_oversold) &
 
-    (dataframe[''close''] > dataframe[''ma''])
+    (dataframe[''rsi_slope''] > 0)) |
+
+    ((dataframe[''ma_slope''] >= 0) &
+
+    (dataframe[''price_momentum''] > 0) &
+
+    (dataframe[''rsi''] < 50))
 
     '
 factors:

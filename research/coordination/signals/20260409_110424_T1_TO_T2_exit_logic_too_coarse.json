@@ -1,0 +1,35 @@
+{
+  "signal_type": "T1_TO_T2",
+  "created_at": "2026-04-09T11:04:32+08:00",
+  "from_thread": "thread1_profile_optimization",
+  "to_thread": "thread2_spec_optimization",
+  "strategy_name": "MultiLsV2Strategy",
+  "active_profile": "paper_baseline",
+  "candidate_profile": "candidate_exit_20260409_a",
+  "summary": "Profile layer solved sparse entries, but exit_signal remains structurally loss-making across multiple profile-only exit tuning attempts.",
+  "status": "OPEN",
+  "problem_class": "EXIT_LOGIC_TOO_COARSE",
+  "evidence": [
+    "paper_baseline validation had 1 trade / 61 days; candidate_density_20260409_a raised validation to 21 trades and trades_per_day to 0.3443, so entry sparsity is no longer the primary blocker.",
+    "candidate_density_20260409_a validation still failed with profit_total=-0.003322 and profit_factor=0.8388; exit_signal contributed 11 exits with total -12.980 USDT.",
+    "candidate_exit_20260409_a improved validation to profit_total=-0.000986 and profit_factor=0.9543, but exit_signal still contributed 10 exits with total -19.485 USDT and only 10.0% winrate.",
+    "candidate_exit_20260409_a test remained negative at -2.10% with profit_factor=0.58; exit_signal contributed 11 exits with total -49.598 USDT and 0% winrate.",
+    "candidate_exit_20260409_b and candidate_exit_20260409_c changed exit-side thresholds, stoploss, ROI, and trailing behavior but validation remained below gate, confirming parameter-only tuning is saturating."
+  ],
+  "attempted_profile_changes": [
+    "reduced ma period from 276 to 220 and shortened rsi period from 15 to 12",
+    "relaxed rsi entry/exit thresholds from 26.6/78.6 to 31.5/73.0",
+    "tightened stoploss from -0.251 to -0.08 and then -0.05",
+    "compressed minimal_roi ladder from 0.253/0.118/0.043/0 to 0.018/0.01/0.004/0 and then 0.012/0.008/0.003/0",
+    "reduced trailing_stop_positive and trailing_stop_positive_offset to make trailing exits trigger earlier",
+    "tested more aggressive rsi thresholds at 33.5/69.0 and observed validation regression"
+  ],
+  "why_profile_layer_failed": "Profile-level knobs can change threshold placement and risk parameters, but they cannot redesign the exit condition structure itself. After signal density was restored, losses remained concentrated in exit_signal rather than in sparse-entry failure. Multiple profile-only exit tuning attempts improved validation toward breakeven but could not produce a stable profit_factor above 1, and test performance remained clearly negative.",
+  "requested_spec_changes": [
+    "review whether the current exit condition '(rsi extreme) OR (price crossing ma)' is too coarse and exits too late after reversal confirmation",
+    "consider asymmetric long/short exit logic instead of reusing the same threshold family for both entry and exit",
+    "consider adding derived indicators or exit guards that detect momentum loss earlier than the current ma cross",
+    "review whether exit logic should separate profit-taking from reversal-stop behavior instead of relying on the same boolean expression"
+  ],
+  "expected_outcome": "Reduce structural losses attributed to exit_signal while keeping the improved sample density achieved at the profile layer."
+}

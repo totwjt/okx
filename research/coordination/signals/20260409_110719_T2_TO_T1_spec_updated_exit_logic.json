@@ -1,0 +1,27 @@
+{
+  "signal_type": "T2_TO_T1",
+  "created_at": "2026-04-09T11:07:19+08:00",
+  "from_thread": "thread2_spec_optimization",
+  "to_thread": "thread1_profile_optimization",
+  "strategy_name": "MultiLsV2Strategy",
+  "active_profile": "paper_baseline",
+  "summary": "Updated spec exit structure to separate profit-taking from reversal-stop behavior using momentum-loss guards, while keeping the existing profile schema intact.",
+  "status": "DONE",
+  "source_signal": "20260409_110424_T1_TO_T2_exit_logic_too_coarse.json",
+  "spec_changes": [
+    "added derived indicators rsi_slope and price_momentum so exits can react to momentum rollover before a full moving-average cross",
+    "replaced the previous long exit '(rsi extreme) OR (price crossing ma)' with two explicit branches: profit-taking on overbought rollover and reversal-stop on simultaneous trend/momentum deterioration above RSI 50",
+    "replaced the previous short exit '(rsi extreme) OR (price crossing ma)' with the mirrored short-side structure using oversold bounce and upward momentum loss guards"
+  ],
+  "affected_files": [
+    "strategies/spec/multi_ls_v2.yaml"
+  ],
+  "logic_rationale": "The prior exit expression used one coarse boolean family for both profit-taking and reversal control, which allowed losing positions to wait for a blunt MA cross or to exit on RSI extremes without confirming momentum rollover. The new structure keeps entry-side density unchanged, but adds early momentum-loss detection via RSI slope and short-horizon price momentum. It also separates profitable exhaustion exits from defensive reversal exits, and makes the long and short branches explicitly directional instead of relying on the same MA-cross pattern.",
+  "expected_tradeoff": "Exit signals should trigger earlier when trend strength fades, which can reduce the large negative exit_signal bucket seen by thread1. The tradeoff is a higher chance of cutting winners earlier during noisy pullbacks, so thread1 should expect changed trade duration and may need to retune ROI and trailing parameters on top of the new spec.",
+  "next_actions_for_thread_1": [
+    "run the standard generate step so generated strategy artifacts reflect the new spec",
+    "restart profile validate and validate from the current active profile or a fresh candidate cloned from paper_baseline",
+    "compare exit_reason distribution, profit_factor, and average trade duration against the pre-change exit-heavy baselines",
+    "if validation improves but new exits become too eager, retune ROI and trailing on the profile layer before considering another spec escalation"
+  ]
+}

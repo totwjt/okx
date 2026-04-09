@@ -69,6 +69,9 @@ def validate_profile(
     min_profit: float,
     min_profit_factor: float,
     max_drawdown: float,
+    min_winrate: float,
+    min_avg_profit: float,
+    min_trades_per_day: float,
     promote_on_pass: bool,
 ) -> tuple[dict, bool]:
     profile = load_profile(name, spec, profile_name)
@@ -94,6 +97,9 @@ def validate_profile(
             min_profit=min_profit,
             min_profit_factor=min_profit_factor,
             max_drawdown=max_drawdown,
+            min_winrate=min_winrate,
+            min_avg_profit=min_avg_profit,
+            min_trades_per_day=min_trades_per_day,
         )
     except RuntimeError as exc:
         print(f"错误: {exc}")

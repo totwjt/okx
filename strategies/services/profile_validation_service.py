@@ -1,5 +1,6 @@
 import json
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 
@@ -40,6 +41,12 @@ def normalize_backtest_metrics(metrics: dict) -> dict:
     profit_total = float(metrics.get("profit_total", metrics.get("profit_total_ratio", 0)) or 0)
     profit_total_abs = float(metrics.get("profit_total_abs", 0) or 0)
     profit_factor = float(metrics.get("profit_factor", 0) or 0)
+    wins = int(metrics.get("wins", metrics.get("win_trades", 0)) or 0)
+    losses = int(metrics.get("losses", metrics.get("lose_trades", 0)) or 0)
+    draws = int(metrics.get("draws", metrics.get("draw_trades", 0)) or 0)
+    winrate = float(metrics.get("winrate", 0) or 0)
+    avg_profit = float(metrics.get("profit_mean", metrics.get("avg_profit", 0)) or 0)
+    expectancy = float(metrics.get("expectancy_ratio", metrics.get("expectancy", 0)) or 0)
 
     drawdown_candidates = [
         metrics.get("max_drawdown_account"),
@@ -57,9 +64,29 @@ def normalize_backtest_metrics(metrics: dict) -> dict:
         "profit_total": profit_total,
         "profit_total_abs": profit_total_abs,
         "profit_factor": profit_factor,
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "winrate": winrate,
+        "avg_profit": avg_profit,
+        "expectancy_ratio": expectancy,
         "max_drawdown_account": max_drawdown,
         "stake_currency": metrics.get("stake_currency", "USDT"),
     }
+
+
+def timerange_days(timerange: str) -> int | None:
+    if "-" not in timerange:
+        return None
+    start_text, end_text = timerange.split("-", 1)
+    try:
+        start = datetime.strptime(start_text, "%Y%m%d")
+        end = datetime.strptime(end_text, "%Y%m%d")
+    except ValueError:
+        return None
+    if end < start:
+        return None
+    return (end - start).days + 1
 
 
 def run_profile_validation(
@@ -75,6 +102,9 @@ def run_profile_validation(
     min_profit: float,
     min_profit_factor: float,
     max_drawdown: float,
+    min_winrate: float,
+    min_avg_profit: float,
+    min_trades_per_day: float,
 ) -> dict:
     backtest_result_dir.mkdir(parents=True, exist_ok=True)
     before = {p.name for p in backtest_result_dir.glob("*.zip")}
@@ -102,26 +132,69 @@ def run_profile_validation(
 
     latest_zip = latest_created_backtest_zip(before, backtest_result_dir)
     metrics = normalize_backtest_metrics(read_backtest_summary(latest_zip, strategy_name))
+    validation_days = timerange_days(timerange)
+    trades_per_day = None
+    if validation_days:
+        trades_per_day = metrics["total_trades"] / validation_days
 
     gate = {
         "min_trades": min_trades,
         "min_profit": min_profit,
         "min_profit_factor": min_profit_factor,
         "max_drawdown": max_drawdown,
+        "min_winrate": min_winrate,
+        "min_avg_profit": min_avg_profit,
+        "min_trades_per_day": min_trades_per_day,
     }
-    passed = (
-        metrics["total_trades"] >= min_trades
-        and metrics["profit_total"] >= min_profit
-        and metrics["profit_factor"] >= min_profit_factor
-        and metrics["max_drawdown_account"] <= max_drawdown
-    )
+    failed_checks: list[str] = []
+    warnings: list[str] = []
+
+    if metrics["total_trades"] < min_trades:
+        failed_checks.append(
+            f"total_trades={metrics['total_trades']} < min_trades={min_trades}"
+        )
+    if metrics["profit_total"] < min_profit:
+        failed_checks.append(
+            f"profit_total={metrics['profit_total']:.6f} < min_profit={min_profit:.6f}"
+        )
+    if metrics["profit_factor"] < min_profit_factor:
+        failed_checks.append(
+            f"profit_factor={metrics['profit_factor']:.4f} < min_profit_factor={min_profit_factor:.4f}"
+        )
+    if metrics["max_drawdown_account"] > max_drawdown:
+        failed_checks.append(
+            f"max_drawdown_account={metrics['max_drawdown_account']:.4f} > max_drawdown={max_drawdown:.4f}"
+        )
+    if metrics["winrate"] < min_winrate:
+        failed_checks.append(
+            f"winrate={metrics['winrate']:.4f} < min_winrate={min_winrate:.4f}"
+        )
+    if metrics["avg_profit"] < min_avg_profit:
+        failed_checks.append(
+            f"avg_profit={metrics['avg_profit']:.6f} < min_avg_profit={min_avg_profit:.6f}"
+        )
+    if trades_per_day is not None and trades_per_day < min_trades_per_day:
+        failed_checks.append(
+            f"trades_per_day={trades_per_day:.4f} < min_trades_per_day={min_trades_per_day:.4f}"
+        )
+
+    if metrics["total_trades"] == 0:
+        warnings.append("No trades were produced in validation; this is only a smoke pass, not strategy evidence.")
+    if validation_days is None:
+        warnings.append(f"Unable to parse validation timerange for cadence checks: {timerange}")
+
+    passed = not failed_checks
 
     return {
         "profile_name": profile_name,
         "timerange": timerange,
         "backtest_zip": str(latest_zip),
         "metrics": metrics,
+        "validation_days": validation_days,
+        "trades_per_day": trades_per_day,
         "gate": gate,
+        "failed_checks": failed_checks,
+        "warnings": warnings,
         "passed": passed,
     }
 

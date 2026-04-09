@@ -1,0 +1,65 @@
+profile_name: sol_balanced
+strategy_name: grid_ls_v1
+status: paper_active
+source: symbol_profile:SOL
+updated_at: '2026-04-09T07:41:13.196910+00:00'
+overrides:
+  factors:
+    ma:
+      period: 66
+    rsi:
+      period: 13
+    rsi_oversold:
+      value: 30.0
+    rsi_overbought:
+      value: 70.0
+    bb:
+      period: 44
+      std: 2.3
+    volume:
+      ma_period: 20
+      ratio_threshold: 1.05
+  stoploss: -0.08
+  minimal_roi:
+    '0': 0.02
+    '90': 0.007
+    '300': 0.0
+  trailing_stop: true
+  trailing_stop_positive: 0.01
+  trailing_stop_positive_offset: 0.017
+  risk_model:
+    max_open_trades: 3
+validation:
+  last_result:
+    profile_name: sol_balanced
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_07-41-12.zip
+    metrics:
+      total_trades: 13
+      profit_total: -0.04375728704999999
+      profit_total_abs: -43.75728704999999
+      profit_factor: 0.45163203934382024
+      wins: 9
+      losses: 4
+      draws: 0
+      winrate: 0.6923076923076923
+      avg_profit: -0.010217534895402496
+      expectancy_ratio: -0.16872860327882455
+      max_drawdown_account: 0.07415739996449848
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.21311475409836064
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks:
+    - profit_total=-0.043757 < min_profit=0.000000
+    - profit_factor=0.4516 < min_profit_factor=1.0000
+    - avg_profit=-0.010218 < min_avg_profit=0.000000
+    warnings: []
+    passed: false

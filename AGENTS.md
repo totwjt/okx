@@ -72,6 +72,9 @@ AI-OuYi/
 
 - 不要默认模板目录是当前真实运行目录，当前主目录是 `execution/freqtrade/user_data/`。
 - 不要再维护第二份 Docker 策略副本，`strategies/` 就是唯一策略源码目录。
+- 当前主线唯一允许的策略接入链是：`spec -> profile -> generated -> auto_json -> docker运行`。
+- `strategies/` 主目录不再接受独立手写实验策略；这类文件应放到 `research/experiments/` 或 `research/archive/`。
+- `generated/`、`auto_*.py`、`auto_*.json` 都是生成产物，不应再作为手工维护入口。
 - 不要仅凭文档断言策略有效，优先核对最近的回测产物与配置。
 - 如果要修改策略逻辑，先说明会影响 `Freqtrade`、自定义回测脚本、Docker 副本中的哪一层。
 - 如果只做文档或 AI 说明优化，不要顺手改交易逻辑。

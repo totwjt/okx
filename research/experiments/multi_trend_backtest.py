@@ -1,6 +1,6 @@
 """
 多空切换策略回测脚本 - VectorBT
-基于策略规范: 3多空切换.md
+基于归档策略规范: research/archive/docs/3多空切换.md
 """
 import os
 import sys

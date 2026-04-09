@@ -1,0 +1,607 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COMPOSE_FILE="$ROOT_DIR/execution/freqtrade/docker-compose.yml"
+CONTAINER_NAME="freqtrade"
+API_BASE="http://127.0.0.1:8080/api/v1"
+API_AUTH="freqtrade:freqtrade"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  execution/scripts/simctl up
+  execution/scripts/simctl down
+  execution/scripts/simctl restart
+  execution/scripts/simctl ps
+  execution/scripts/simctl logs [tail]
+  execution/scripts/simctl ping
+  execution/scripts/simctl summary
+  execution/scripts/simctl baseline-report [log_tail]
+  execution/scripts/simctl paper-run-start <run_name> [notes]
+  execution/scripts/simctl paper-run-report <run_name>
+  execution/scripts/simctl show-config
+  execution/scripts/simctl status
+  execution/scripts/simctl balance
+  execution/scripts/simctl profit
+  execution/scripts/simctl recent-trades [limit]
+  execution/scripts/simctl recent-trades-summary [limit]
+  execution/scripts/simctl daily-report [limit_days]
+  execution/scripts/simctl pair-stats
+  execution/scripts/simctl exit-reason-stats
+  execution/scripts/simctl direction-stats
+  execution/scripts/simctl strategy-sample-status
+  execution/scripts/simctl strategy-natural-trades [limit]
+  execution/scripts/simctl strategy-review-gate [target_samples]
+  execution/scripts/simctl force-enter <pair> <long|short> [stake_amount] [leverage]
+  execution/scripts/simctl force-exit <trade_id>
+  execution/scripts/simctl db-last-trades [limit]
+  execution/scripts/simctl db-last-orders [limit]
+EOF
+}
+
+require_container() {
+  if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+    echo "Container '$CONTAINER_NAME' is not running." >&2
+    exit 1
+  fi
+}
+
+compose() {
+  docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+api_get() {
+  local path="$1"
+  require_container
+  docker exec "$CONTAINER_NAME" sh -lc \
+    "curl -sS -u '$API_AUTH' '$API_BASE/$path'"
+}
+
+api_post_json() {
+  local path="$1"
+  local payload="$2"
+  require_container
+  docker exec "$CONTAINER_NAME" python -c "
+import base64, json, sys, urllib.request
+payload = json.loads(sys.argv[1])
+req = urllib.request.Request(
+    '$API_BASE/$path',
+    data=json.dumps(payload).encode(),
+    headers={
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + base64.b64encode(b'$API_AUTH').decode(),
+    },
+    method='POST',
+)
+with urllib.request.urlopen(req, timeout=30) as resp:
+    print(resp.read().decode())
+" "$payload"
+}
+
+python_in_container() {
+  local code="$1"
+  shift || true
+  require_container
+  docker exec "$CONTAINER_NAME" python -c "$code" "$@"
+}
+
+current_strategy_name() {
+  require_container
+  local cmd_json strategy
+  cmd_json="$(docker inspect "$CONTAINER_NAME" --format '{{json .Config.Cmd}}' 2>/dev/null || true)"
+  strategy="$(printf '%s' "$cmd_json" | sed -n 's/.*"--strategy","\\([^"]*\\)".*/\\1/p')"
+  if [[ -z "$strategy" ]]; then
+    strategy="MultiLsV3Strategy"
+  fi
+  printf '%s\n' "$strategy"
+}
+
+db_query() {
+  local sql="$1"
+  require_container
+  python_in_container "
+import json, sqlite3, sys
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute(sys.argv[1])
+print(json.dumps([dict(r) for r in cur.fetchall()], ensure_ascii=False, default=str))
+" "$sql"
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  up)
+    compose up -d freqtrade
+    ;;
+  down)
+    compose down
+    ;;
+  restart)
+    compose restart freqtrade
+    ;;
+  ps)
+    compose ps
+    ;;
+  logs)
+    tail_lines="${1:-120}"
+    docker logs --tail "$tail_lines" "$CONTAINER_NAME"
+    ;;
+  ping)
+    api_get "ping"
+    ;;
+  summary)
+    python_in_container "
+import json, urllib.request
+from datetime import datetime
+
+base = '$API_BASE'
+auth = 'Basic ZnJlcXRyYWRlOmZyZXF0cmFkZQ=='
+
+def get(path):
+    req = urllib.request.Request(
+        f'{base}/{path}',
+        headers={'Authorization': auth},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+balance = get('balance')
+profit = get('profit')
+status = get('status')
+
+print('Bot: okx_scalping_bot')
+print('Mode: dry_run / REST baseline')
+print(f\"Balance: {balance.get('total', 0):.6f} {balance.get('stake', 'USDT')}\")
+print(f\"Bot-owned: {balance.get('total_bot', 0):.6f} {balance.get('stake', 'USDT')}\")
+print(f\"PnL(all): {profit.get('profit_all_coin', 0):.6f} {balance.get('stake', 'USDT')} ({profit.get('profit_all_percent', 0):.2f}%)\")
+print(f\"Trades: {profit.get('closed_trade_count', 0)}/{profit.get('trade_count', 0)} closed/total\")
+print(f\"Winrate: {profit.get('winrate', 0) * 100:.2f}%\")
+print(f\"Open trades: {len(status)}\")
+if status:
+    print('Open positions:')
+    for trade in status:
+        side = 'short' if trade.get('is_short') else 'long'
+        print(f\"- #{trade.get('trade_id')} {trade.get('pair')} {side} stake={trade.get('stake_amount')} pnl={trade.get('profit_abs')} ({trade.get('profit_pct')}%)\")
+" 
+    ;;
+  baseline-report)
+    tail_lines="${1:-200}"
+    python_in_container "
+import json, re, sqlite3, subprocess, sys, urllib.request
+from pathlib import Path
+
+base = '$API_BASE'
+auth = 'Basic ZnJlcXRyYWRlOmZyZXF0cmFkZQ=='
+tail_lines = int(sys.argv[1])
+config = json.loads(Path('/freqtrade/user_data/config.json').read_text())
+
+def get(path):
+    req = urllib.request.Request(
+        f'{base}/{path}',
+        headers={'Authorization': auth},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+def bool_status(ok):
+    return 'OK' if ok else 'CHECK'
+
+balance = get('balance')
+profit = get('profit')
+status = get('status')
+
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  count(*) as total_trades,
+  sum(case when is_open = 1 then 1 else 0 end) as open_trades,
+  sum(case when is_open = 0 then 1 else 0 end) as closed_trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_closed_trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then coalesce(close_profit_abs, 0) else 0 end) as natural_closed_pnl,
+  max(open_date) as last_open_date,
+  max(close_date) as last_close_date
+from trades
+''')
+trade_stats = dict(cur.fetchone())
+
+cur.execute('''
+select
+  strategy,
+  count(*) as trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_closed_trades,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then coalesce(close_profit_abs, 0) else 0 end) as natural_closed_pnl
+from trades
+group by strategy
+order by trades desc
+limit 3
+''')
+top_strategies = [dict(r) for r in cur.fetchall()]
+
+log_output = subprocess.run(
+    ['tail', '-n', str(tail_lines), '/freqtrade/user_data/logs/freqtrade.log'],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+log_text = log_output.stdout or ''
+pattern_map = {
+    'errors': r'(?im)\\bERROR\\b|Traceback',
+    'ws_disconnects': r'(?i)\\b1006\\b|watch_ohlcv|websocket.*(?:disconnect|timeout|closed)',
+    'timeouts': r'(?i)timed out|timeout',
+}
+pattern_counts = {name: len(re.findall(pattern, log_text)) for name, pattern in pattern_map.items()}
+
+print('REST baseline report')
+print(f\"Config dry_run: {config.get('dry_run')} [{bool_status(config.get('dry_run') is True)}]\")
+print(f\"Config enable_ws: {config.get('exchange', {}).get('enable_ws')} [{'OK' if config.get('exchange', {}).get('enable_ws') is False else 'CHECK'}]\")
+print(f\"Config trading_mode: {config.get('trading_mode')}\")
+print(f\"Config margin_mode: {config.get('margin_mode')}\")
+print(f\"API summary: balance={balance.get('total', 0):.6f} {balance.get('stake', 'USDT')} pnl={profit.get('profit_all_coin', 0):.6f} {balance.get('stake', 'USDT')} open_positions={len(status)} [{bool_status(True)}]\")
+print(f\"Trades: total={trade_stats.get('total_trades', 0) or 0} closed={trade_stats.get('closed_trades', 0) or 0} natural_closed={trade_stats.get('natural_closed_trades', 0) or 0}\")
+print(f\"Natural closed PnL: {(trade_stats.get('natural_closed_pnl', 0) or 0):.6f} {balance.get('stake', 'USDT')}\")
+print(f\"Last open trade: {trade_stats.get('last_open_date') or '-'}\")
+print(f\"Last closed trade: {trade_stats.get('last_close_date') or '-'}\")
+print(f\"Recent log scan ({tail_lines} lines): errors={pattern_counts['errors']} ws_disconnects={pattern_counts['ws_disconnects']} timeouts={pattern_counts['timeouts']}\")
+if top_strategies:
+    print('Top strategies in DB:')
+    for row in top_strategies:
+        print(f\"- {row.get('strategy')}: trades={row.get('trades', 0)} natural_closed={row.get('natural_closed_trades', 0) or 0} natural_closed_pnl={(row.get('natural_closed_pnl', 0) or 0):.6f} {balance.get('stake', 'USDT')}\")
+
+issues = []
+if config.get('dry_run') is not True:
+    issues.append('config dry_run is not true')
+if config.get('exchange', {}).get('enable_ws') is not False:
+    issues.append('config exchange.enable_ws is not false')
+if pattern_counts['errors'] > 0:
+    issues.append('recent logs contain ERROR/Traceback')
+if pattern_counts['ws_disconnects'] > 0:
+    issues.append('recent logs still show websocket-related disconnect signals')
+if trade_stats.get('natural_closed_trades', 0) in (None, 0):
+    issues.append('no natural closed trades yet')
+
+print('Verdict:')
+if issues:
+    print('CHECK')
+    for issue in issues:
+        print(f\"- {issue}\")
+else:
+    print('OK')
+    print('- REST baseline config is aligned and recent logs are quiet.')
+" "$tail_lines"
+    ;;
+  paper-run-start)
+    run_name="${1:-}"
+    notes="${2:-}"
+    if [[ -z "$run_name" ]]; then
+      echo "paper-run-start requires: <run_name> [notes]" >&2
+      exit 1
+    fi
+    strategy_name="$(current_strategy_name)"
+    python3 "$ROOT_DIR/execution/scripts/paper_run_report.py" start "$run_name" --strategy "$strategy_name" --notes "$notes"
+    ;;
+  paper-run-report)
+    run_name="${1:-}"
+    if [[ -z "$run_name" ]]; then
+      echo "paper-run-report requires: <run_name>" >&2
+      exit 1
+    fi
+    python3 "$ROOT_DIR/execution/scripts/paper_run_report.py" report "$run_name"
+    ;;
+  show-config)
+    api_get "show_config"
+    ;;
+  status)
+    api_get "status"
+    ;;
+  balance)
+    api_get "balance"
+    ;;
+  profit)
+    api_get "profit"
+    ;;
+  recent-trades)
+    limit="${1:-5}"
+    api_get "trades?limit=$limit"
+    ;;
+  recent-trades-summary)
+    limit="${1:-5}"
+    python_in_container "
+import json, urllib.request, sys
+
+base = '$API_BASE'
+auth = 'Basic ZnJlcXRyYWRlOmZyZXF0cmFkZQ=='
+limit = int(sys.argv[1])
+
+def get(path):
+    req = urllib.request.Request(
+        f'{base}/{path}',
+        headers={'Authorization': auth},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+rows = get(f'trades?limit={limit}').get('trades', [])
+if not rows:
+    print('No trades.')
+    raise SystemExit(0)
+
+for trade in rows[-limit:]:
+    side = 'short' if trade.get('is_short') else 'long'
+    pnl = trade.get('profit_abs', 0) or 0
+    pnl_pct = trade.get('profit_pct', 0) or 0
+    status = 'open' if trade.get('is_open') else 'closed'
+    print(f\"#{trade.get('trade_id')} {trade.get('pair')} {side} {status}\")
+    print(f\"  open={trade.get('open_date')} close={trade.get('close_date')}\")
+    print(f\"  stake={trade.get('stake_amount')} open_rate={trade.get('open_rate')} close_rate={trade.get('close_rate')}\")
+    print(f\"  pnl={pnl:.6f} USDT ({pnl_pct:.2f}%) reason={trade.get('exit_reason')}\")
+" "$limit"
+    ;;
+  daily-report)
+    limit="${1:-7}"
+    python_in_container "
+import json, urllib.request, sys
+
+base = '$API_BASE'
+auth = 'Basic ZnJlcXRyYWRlOmZyZXF0cmFkZQ=='
+limit = int(sys.argv[1])
+
+def get(path):
+    req = urllib.request.Request(
+        f'{base}/{path}',
+        headers={'Authorization': auth},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode())
+
+profit = get('profit')
+daily = get(f'daily?timescale={limit}')
+rows = daily.get('data', [])
+
+print('Daily dry-run report')
+print(f\"Closed trades: {profit.get('closed_trade_count', 0)}\")
+print(f\"PnL(all): {profit.get('profit_all_coin', 0):.6f} {daily.get('stake_currency', 'USDT')} ({profit.get('profit_all_percent', 0):.2f}%)\")
+print(f\"Winrate: {profit.get('winrate', 0) * 100:.2f}%\")
+print(f\"Max drawdown: {profit.get('max_drawdown_abs', 0):.6f} {daily.get('stake_currency', 'USDT')}\")
+print('')
+print('Recent daily records:')
+for row in rows[-limit:]:
+    print(f\"- {row.get('date')} pnl={row.get('abs_profit', 0):.6f} {daily.get('stake_currency', 'USDT')} rel={row.get('rel_profit', 0) * 100:.2f}% trades={row.get('trade_count', 0)} start={row.get('starting_balance', 0):.6f}\")
+" "$limit"
+    ;;
+  pair-stats)
+    python_in_container "
+import sqlite3
+
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  pair,
+  count(*) as trades,
+  sum(coalesce(close_profit_abs, 0)) as pnl,
+  avg(coalesce(close_profit_abs, 0)) as avg_pnl,
+  avg(coalesce(close_profit, 0)) as avg_ratio
+from trades
+where is_open = 0
+group by pair
+order by pnl desc
+''')
+rows = cur.fetchall()
+print('Pair stats')
+for row in rows:
+    print(f\"- {row['pair']}: trades={row['trades']} pnl={row['pnl']:.6f} USDT avg_pnl={row['avg_pnl']:.6f} avg_ratio={row['avg_ratio'] * 100:.2f}%\")
+"
+    ;;
+  exit-reason-stats)
+    python_in_container "
+import sqlite3
+
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  coalesce(exit_reason, \"unknown\") as exit_reason,
+  count(*) as trades,
+  sum(coalesce(close_profit_abs, 0)) as pnl,
+  avg(coalesce(close_profit_abs, 0)) as avg_pnl
+from trades
+where is_open = 0
+group by coalesce(exit_reason, \"unknown\")
+order by trades desc, pnl desc
+''')
+rows = cur.fetchall()
+print('Exit reason stats')
+for row in rows:
+    print(f\"- {row['exit_reason']}: trades={row['trades']} pnl={row['pnl']:.6f} USDT avg_pnl={row['avg_pnl']:.6f}\")
+"
+    ;;
+  direction-stats)
+    python_in_container "
+import sqlite3
+
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  case when is_short = 1 then \"short\" else \"long\" end as side,
+  count(*) as trades,
+  sum(coalesce(close_profit_abs, 0)) as pnl,
+  avg(coalesce(close_profit_abs, 0)) as avg_pnl,
+  avg(coalesce(close_profit, 0)) as avg_ratio
+from trades
+where is_open = 0
+group by case when is_short = 1 then \"short\" else \"long\" end
+order by trades desc
+''')
+rows = cur.fetchall()
+print('Direction stats')
+for row in rows:
+    print(f\"- {row['side']}: trades={row['trades']} pnl={row['pnl']:.6f} USDT avg_pnl={row['avg_pnl']:.6f} avg_ratio={row['avg_ratio'] * 100:.2f}%\")
+"
+    ;;
+  strategy-sample-status)
+    python_in_container "
+import sqlite3
+
+strategy = 'MultiLsV3Strategy'
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+
+cur.execute('''
+select
+  count(*) as all_count,
+  sum(case when coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_count,
+  sum(case when coalesce(enter_tag, '') = 'force_entry' then 1 else 0 end) as forced_count,
+  sum(case when is_open = 1 then 1 else 0 end) as open_count,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then coalesce(close_profit_abs, 0) else 0 end) as natural_pnl
+from trades
+where strategy = ?
+''', (strategy,))
+row = cur.fetchone()
+
+cur.execute('''
+select id, pair, is_open, coalesce(enter_tag, '') as enter_tag, exit_reason, close_profit_abs, open_date, close_date
+from trades
+where strategy = ?
+order by id desc
+limit 3
+''', (strategy,))
+recent = cur.fetchall()
+
+print(f'Strategy: {strategy}')
+print(f\"All samples: {row['all_count'] or 0}\")
+print(f\"Natural samples: {row['natural_count'] or 0}\")
+print(f\"Forced samples: {row['forced_count'] or 0}\")
+print(f\"Open trades: {row['open_count'] or 0}\")
+print(f\"Natural closed PnL: {(row['natural_pnl'] or 0):.6f} USDT\")
+print('Recent strategy samples:')
+for r in recent:
+    tag = r['enter_tag'] or '-'
+    pnl = r['close_profit_abs']
+    pnl_text = 'None' if pnl is None else f'{pnl:.6f}'
+    print(f\"- #{r['id']} {r['pair']} open={r['is_open']} enter_tag={tag} exit_reason={r['exit_reason']} pnl={pnl_text}\")
+"
+    ;;
+  strategy-natural-trades)
+    limit="${1:-5}"
+    python_in_container "
+import sqlite3, sys
+
+strategy = 'MultiLsV3Strategy'
+limit = int(sys.argv[1])
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  id, pair, is_short, is_open, enter_tag, exit_reason,
+  stake_amount, open_rate, close_rate, close_profit_abs, close_profit,
+  open_date, close_date
+from trades
+where strategy = ?
+  and coalesce(enter_tag, '') != 'force_entry'
+order by id desc
+limit ?
+''', (strategy, limit))
+rows = cur.fetchall()
+if not rows:
+    print('No natural MultiLsV3Strategy samples yet.')
+    raise SystemExit(0)
+
+print('Natural MultiLsV3Strategy samples')
+for r in rows:
+    side = 'short' if r['is_short'] else 'long'
+    pnl_abs = r['close_profit_abs']
+    pnl_ratio = r['close_profit']
+    pnl_abs_text = 'None' if pnl_abs is None else f'{pnl_abs:.6f}'
+    pnl_pct_text = 'None' if pnl_ratio is None else f'{pnl_ratio * 100:.2f}%'
+    print(f\"- #{r['id']} {r['pair']} {side} open={r['is_open']}\")
+    print(f\"  open={r['open_date']} close={r['close_date']}\")
+    print(f\"  stake={r['stake_amount']} open_rate={r['open_rate']} close_rate={r['close_rate']}\")
+    print(f\"  pnl={pnl_abs_text} USDT ({pnl_pct_text}) reason={r['exit_reason']}\")
+" "$limit"
+    ;;
+  strategy-review-gate)
+    target="${1:-10}"
+    python_in_container "
+import sqlite3, sys
+
+strategy = 'MultiLsV3Strategy'
+target = int(sys.argv[1])
+conn = sqlite3.connect('/freqtrade/user_data/tradesv3.sqlite')
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+cur.execute('''
+select
+  sum(case when coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_count,
+  sum(case when is_open = 1 and coalesce(enter_tag, '') != 'force_entry' then 1 else 0 end) as natural_open_count,
+  sum(case when is_open = 0 and coalesce(enter_tag, '') != 'force_entry' then coalesce(close_profit_abs, 0) else 0 end) as natural_closed_pnl
+from trades
+where strategy = ?
+''', (strategy,))
+row = cur.fetchone()
+natural_count = row['natural_count'] or 0
+natural_open = row['natural_open_count'] or 0
+natural_pnl = row['natural_closed_pnl'] or 0
+remaining = max(target - natural_count, 0)
+
+print(f'Strategy review gate: {strategy}')
+print(f'Target natural samples: {target}')
+print(f'Current natural samples: {natural_count}')
+print(f'Current natural open trades: {natural_open}')
+print(f'Current natural closed PnL: {natural_pnl:.6f} USDT')
+if natural_count >= target:
+    print('Gate status: READY_FOR_REVIEW')
+    print('Next action: start strategy review using pair/exit-reason/direction stats.')
+else:
+    print('Gate status: COLLECT_MORE_SAMPLES')
+    print(f'Next action: keep simulator running; need {remaining} more natural samples.')
+" "$target"
+    ;;
+  force-enter)
+    pair="${1:-}"
+    side="${2:-}"
+    stake_amount="${3:-50}"
+    leverage="${4:-1}"
+    if [[ -z "$pair" || -z "$side" ]]; then
+      echo "force-enter requires: <pair> <long|short> [stake_amount] [leverage]" >&2
+      exit 1
+    fi
+    api_post_json "forceenter" "{\"pair\":\"$pair\",\"side\":\"$side\",\"ordertype\":\"market\",\"stakeamount\":$stake_amount,\"leverage\":$leverage}"
+    ;;
+  force-exit)
+    trade_id="${1:-}"
+    if [[ -z "$trade_id" ]]; then
+      echo "force-exit requires: <trade_id>" >&2
+      exit 1
+    fi
+    api_post_json "forceexit" "{\"tradeid\":$trade_id,\"ordertype\":\"market\"}"
+    ;;
+  db-last-trades)
+    limit="${1:-5}"
+    db_query "select id, pair, is_open, is_short, open_rate, close_rate, exit_reason, stake_amount, open_date, close_date from trades order by id desc limit $limit"
+    ;;
+  db-last-orders)
+    limit="${1:-8}"
+    db_query "select ft_trade_id, order_id, ft_order_side, status, order_type, average, filled, order_date from orders order by id desc limit $limit"
+    ;;
+  ""|-h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

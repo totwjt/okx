@@ -4,7 +4,19 @@
 
 AI 量化交易策略管理工具，当前聚焦 OKX 合约多空切换策略，支持通过 YAML 配置文件定义策略，自动生成代码，一键回测和参数优化。
 
-当前唯一主线策略为 `MultiLsV2Strategy`。
+当前默认运行策略为 `GridLsV1Strategy`（SOL 网格均值回归基线）。
+
+当前主线唯一允许的策略接入方式是：
+
+`spec -> profile -> generated -> auto_json -> docker运行`
+
+因此：
+
+- `strategies/spec/` 是唯一主线策略定义入口
+- `strategies/profiles/` 是唯一主线参数入口
+- `strategies/generated/`、`strategies/auto_*.py`、`strategies/auto_*.json` 都是生成产物
+- 独立实验策略不得再直接放在 `strategies/` 主目录
+- 历史实验策略已移入 `research/archive/`
 
 当前参数治理采用 `Spec + Profile + Promotion`：
 
@@ -28,9 +40,11 @@ AI 量化交易策略管理工具，当前聚焦 OKX 合约多空切换策略，
 ```
 strategies/
 ├── spec/                      # 策略配置文件 (YAML)
-│   └── multi_ls_v2.yaml     # 多空切换策略 V2
+│   ├── multi_ls_v2.yaml     # 多空切换策略 V2
+│   └── grid_ls_v1.yaml      # 网格均值回归策略 V1
 ├── profiles/                  # 参数档案与激活指针
-│   └── multi_ls_v2/
+│   ├── multi_ls_v2/
+│   └── grid_ls_v1/
 │       ├── default.yaml
 │       ├── paper_baseline.yaml
 │       └── _active.yaml
@@ -41,6 +55,12 @@ strategies/
 ├── cli.py                    # 策略管理 CLI 工具
 └── auto_*.py                 # 自动复制到 freqtrade 的策略
 ```
+
+补充约束：
+
+- `strategies/` 主目录只保留主线生成链相关文件
+- 历史策略与旧规范移入 `research/archive/`
+- 新实验应放到 `research/experiments/`
 
 ## 快速开始
 
@@ -78,6 +98,8 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py profile vali
   --min-trades 10 \
   --min-profit 0.02 \
   --min-profit-factor 1.1 \
+  --min-winrate 0.45 \
+  --min-trades-per-day 0.5 \
   --max-drawdown 0.20 \
   --promote-on-pass
 
@@ -132,7 +154,16 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 - `--min-trades 1`
 - `--min-profit 0.0`
 - `--min-profit-factor 1.0`
+- `--min-winrate 0.0`
+- `--min-avg-profit 0.0`
+- `--min-trades-per-day 0.0`
 - `--max-drawdown 0.30`
+
+`profile validate` 现在还会输出：
+
+- `failed_checks`，明确指出是哪条 gate 没过
+- `warnings`，例如 `0 trades` 这种只能算冒烟通过、不能算策略证据的情况
+- `validation_days` 与 `trades_per_day`，用于识别“虽然通过但样本太稀薄”的 profile
 
 返回码约定：
 
@@ -195,17 +226,18 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 
 当前参数采用单一事实来源：
 
-1. `spec/multi_ls_v2.yaml`
-2. `generated/multi_ls_v2.py` 与 `auto_multi_ls_v2.py` 由策略定义生成
-3. `profiles/multi_ls_v2/*.yaml` 管理具体运行参数组合
+1. `spec/<strategy>.yaml`
+2. `generated/<strategy>.py` 与 `auto_<strategy>.py` 由策略定义生成
+3. `profiles/<strategy>/*.yaml` 管理具体运行参数组合
 4. `execution/configs/strategy_config.snapshot.json` 仅作为运行说明和参数快照，不是主参数源
 
 推荐做法：
 
-- 修改默认参数时，优先更新 `spec/multi_ls_v2.yaml`
+- 修改默认参数时，优先更新 `spec/<strategy>.yaml`
 - 修改候选运行参数时，优先新建或更新 `profiles/`
 - 使用 `profile activate` / `profile promote` 切换当前 active profile
 - 然后重新执行 `generate`
+- 不要把新的独立实验策略文件直接放进 `strategies/` 主目录
 
 ## 策略配置文件格式 (YAML)
 

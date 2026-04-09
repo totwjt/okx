@@ -1,0 +1,61 @@
+profile_name: candidate_density_20260409_a
+strategy_name: multi_ls_v2
+status: candidate
+source: profile:paper_baseline
+updated_at: '2026-04-09T02:59:41.910581+00:00'
+overrides:
+  factors:
+    ma:
+      period: 220
+    rsi:
+      period: 12
+    rsi_oversold:
+      value: 31.5
+    rsi_overbought:
+      value: 73.0
+  stoploss: -0.251
+  minimal_roi:
+    '0': 0.253
+    '73': 0.118
+    '217': 0.043
+    '298': 0
+  trailing_stop: true
+  trailing_stop_positive: 0.147
+  trailing_stop_positive_offset: 0.149
+  trailing_only_offset_is_reached: true
+  risk_model:
+    max_open_trades: 3
+validation:
+  last_result:
+    profile_name: candidate_density_20260409_a
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_02-59-41.zip
+    metrics:
+      total_trades: 21
+      profit_total: -0.003322320490000001
+      profit_total_abs: -3.3223204900000014
+      profit_factor: 0.8387797368815155
+      wins: 10
+      losses: 9
+      draws: 2
+      winrate: 0.47619047619047616
+      avg_profit: -0.0004894143820164017
+      expectancy_ratio: -0.16433249371744585
+      max_drawdown_account: 0.009629687395914821
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.3442622950819672
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks:
+    - profit_total=-0.003322 < min_profit=0.000000
+    - profit_factor=0.8388 < min_profit_factor=1.0000
+    - avg_profit=-0.000489 < min_avg_profit=0.000000
+    warnings: []
+    passed: false

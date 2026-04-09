@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import pprint
 import shutil
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ from services.profile_service import (
     load_profile,
 )
 from services.profile_workflow_service import activate_profile, create_profile, import_hyperopt_profile, list_profiles, promote_profile, validate_profile
-from services.runtime_service import STRATEGY_DIR, sync_runtime_profile
+from services.runtime_service import STRATEGY_DIR, strategy_class_name, sync_runtime_profile
 from services.spec_service import (
     SPEC_DIR,
     build_protections,
@@ -66,6 +67,7 @@ def cmd_generate(args):
 
 def cmd_backtest(args):
     name = args.name
+    class_name = strategy_class_name(name)
     spec, profile = get_effective_spec(name, getattr(args, "profile", None))
     ensure_generated_strategy(name, spec)
     sync_runtime_profile(name, spec, profile)
@@ -76,7 +78,7 @@ def cmd_backtest(args):
     cost_model = get_cost_model(spec)
     risk_model = get_risk_model(spec)
     run_backtest(
-        strategy_name=name,
+        strategy_name=class_name,
         phase=phase,
         timerange=timerange,
         config_path=config_path,
@@ -88,6 +90,7 @@ def cmd_backtest(args):
 
 def cmd_validate(args):
     name = args.name
+    class_name = strategy_class_name(name)
     spec, profile = get_effective_spec(name, getattr(args, "profile", None))
     ensure_generated_strategy(name, spec)
     sync_runtime_profile(name, spec, profile)
@@ -104,7 +107,7 @@ def cmd_validate(args):
     enable_protections = bool(build_protections(spec))
     for phase in ["train", "validation", "test"]:
         run_backtest_phase(
-            strategy_name=name,
+            strategy_name=class_name,
             config_path=config_path,
             label=phase.upper(),
             timerange=timeranges[phase],
@@ -116,6 +119,7 @@ def cmd_validate(args):
 
 def cmd_optimize(args):
     name = args.name
+    class_name = strategy_class_name(name)
     spec, profile = get_effective_spec(name, getattr(args, "profile", None))
     ensure_generated_strategy(name, spec)
     sync_runtime_profile(name, spec, profile)
@@ -136,7 +140,7 @@ def cmd_optimize(args):
         print(f"  风控边界: max_open_trades={risk_model.get('max_open_trades')}, max_daily_loss_pct={risk_model.get('max_daily_loss_pct')}, max_drawdown_pct={risk_model.get('max_drawdown_pct')}")
 
     run_hyperopt(
-        strategy_name=name,
+        strategy_name=class_name,
         epochs=epochs,
         timerange=timerange,
         config_path=config_path,
@@ -153,6 +157,7 @@ def cmd_optimize(args):
 def cmd_run(args):
     """运行完整流程"""
     name = args.name
+    class_name = strategy_class_name(name)
     
     print(f"=== 运行完整流程: {name} ===\n")
     
@@ -172,7 +177,7 @@ def cmd_run(args):
     
     print(f"[2/4] 训练集参数优化 (epochs={epochs})...")
     run_hyperopt(
-        strategy_name=name,
+        strategy_name=class_name,
         epochs=epochs,
         timerange=timeranges["train"],
         config_path=config_path,
@@ -184,7 +189,7 @@ def cmd_run(args):
     
     print("[3/4] 验证集回测...")
     run_backtest_phase(
-        strategy_name=name,
+        strategy_name=class_name,
         config_path=config_path,
         label="VALIDATION",
         timerange=timeranges["validation"],
@@ -195,7 +200,7 @@ def cmd_run(args):
     
     print("\n[4/4] 测试集回测...")
     run_backtest_phase(
-        strategy_name=name,
+        strategy_name=class_name,
         config_path=config_path,
         label="TEST",
         timerange=timeranges["test"],
@@ -286,10 +291,15 @@ def cmd_profile(args):
             min_profit=args.min_profit,
             min_profit_factor=args.min_profit_factor,
             max_drawdown=args.max_drawdown,
+            min_winrate=args.min_winrate,
+            min_avg_profit=args.min_avg_profit,
+            min_trades_per_day=args.min_trades_per_day,
             promote_on_pass=args.promote_on_pass,
         )
         metrics = validation_result["metrics"]
         gate = validation_result["gate"]
+        warnings = validation_result["warnings"]
+        failed_checks = validation_result["failed_checks"]
         passed = validation_result["passed"]
 
         print(f"Validation profile: {validation_result['profile_name']}")
@@ -299,11 +309,28 @@ def cmd_profile(args):
         print(f"profit_total={metrics['profit_total']:.6f}")
         print(f"profit_total_abs={metrics['profit_total_abs']:.6f} {metrics['stake_currency']}")
         print(f"profit_factor={metrics['profit_factor']:.4f}")
+        print(f"winrate={metrics['winrate']:.4f}")
+        print(f"avg_profit={metrics['avg_profit']:.6f}")
+        print(f"expectancy_ratio={metrics['expectancy_ratio']:.4f}")
         print(f"max_drawdown_account={metrics['max_drawdown_account']:.4f}")
+        if validation_result["validation_days"] is not None:
+            print(f"validation_days={validation_result['validation_days']}")
+        if validation_result["trades_per_day"] is not None:
+            print(f"trades_per_day={validation_result['trades_per_day']:.4f}")
         print(
             f"Gate: min_trades>={gate['min_trades']}, min_profit>={gate['min_profit']}, "
-            f"min_profit_factor>={gate['min_profit_factor']}, max_drawdown<={gate['max_drawdown']}"
+            f"min_profit_factor>={gate['min_profit_factor']}, max_drawdown<={gate['max_drawdown']}, "
+            f"min_winrate>={gate['min_winrate']}, min_avg_profit>={gate['min_avg_profit']}, "
+            f"min_trades_per_day>={gate['min_trades_per_day']}"
         )
+        if warnings:
+            print("Warnings:")
+            for warning in warnings:
+                print(f"  - {warning}")
+        if failed_checks:
+            print("Failed checks:")
+            for check in failed_checks:
+                print(f"  - {check}")
         print(f"Validation status: {'PASS' if passed else 'FAIL'}")
 
         if promoted:
@@ -387,6 +414,9 @@ def main():
     profile_validate.add_argument("--min-profit", type=float, default=0.0, help="最低 profit_total")
     profile_validate.add_argument("--min-profit-factor", type=float, default=1.0, help="最低 profit_factor")
     profile_validate.add_argument("--max-drawdown", type=float, default=0.30, help="允许的最大回撤比例")
+    profile_validate.add_argument("--min-winrate", type=float, default=0.0, help="最低 winrate，使用 0-1 比例")
+    profile_validate.add_argument("--min-avg-profit", type=float, default=0.0, help="最低单笔平均收益比例")
+    profile_validate.add_argument("--min-trades-per-day", type=float, default=0.0, help="最低日均成交笔数")
     profile_validate.add_argument("--promote-on-pass", action="store_true", help="验证通过后自动晋级为 validated")
     
     args = parser.parse_args()

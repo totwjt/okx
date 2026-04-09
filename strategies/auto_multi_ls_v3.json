@@ -1,0 +1,33 @@
+{
+  "strategy_name": "MultiLsV3Strategy",
+  "profile_name": "candidate_profit_20260409_a",
+  "params": {
+    "max_open_trades": {
+      "max_open_trades": 3
+    },
+    "buy": {
+      "rsi_period": 13,
+      "rsi_oversold": 24.0
+    },
+    "sell": {
+      "rsi_overbought": 84.1
+    },
+    "roi": {
+      "0": 0.224,
+      "54": 0.123,
+      "113": 0.019,
+      "180": 0
+    },
+    "stoploss": {
+      "stoploss": -0.13
+    },
+    "trailing": {
+      "trailing_stop": false,
+      "trailing_stop_positive": 0.01,
+      "trailing_stop_positive_offset": 0.015,
+      "trailing_only_offset_is_reached": false
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2026-04-09T07:21:50.180284+00:00"
+}

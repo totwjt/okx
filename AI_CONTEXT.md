@@ -7,14 +7,14 @@
 ## 接手时先确认的 5 件事
 
 1. 当前真实运行目录是不是 `execution/freqtrade/user_data/`
-2. 容器 `freqtrade` 是否仍以 `MultiLsV2Strategy` 作为默认启动策略
+2. 容器 `freqtrade` 是否仍以 `GridLsV1Strategy` 作为默认启动策略
 3. Docker 是否仍把本地 `strategies/` 直接挂载到容器策略目录
 4. 最近回测结果对应的是哪一个策略类名
 5. 这次任务是否允许修改功能代码，还是只允许修改文档/配置/AI 文件
 
 ## 当前仓库状态
 
-- `execution/freqtrade/docker-compose.yml` 默认通过 `trade` 启动 `MultiLsV2Strategy`
+- `execution/freqtrade/docker-compose.yml` 默认通过 `trade` 启动 `GridLsV1Strategy`
 - 本地 `strategies/` 是唯一策略源码目录，并直接挂载进 Docker
 - 当前版本判断以 Docker 环境为准；关于本地 package 安装引发的旧兼容性记忆，不作为当前判断依据
 - 历史回测里可能还会看到 `MultiLSStrategy`、`LongShortSwitchStrategy` 等旧名字，它们不再是当前主线
@@ -58,8 +58,8 @@
 
 ```bash
 docker compose -f execution/freqtrade/docker-compose.yml up -d freqtrade
-docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s GridLsV1Strategy
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s GridLsV1Strategy
 docker logs -f freqtrade
 execution/scripts/simctl up
 execution/scripts/simctl summary
@@ -73,7 +73,7 @@ execution/scripts/simctl strategy-natural-trades 5
 execution/scripts/simctl strategy-review-gate 10
 execution/scripts/simctl balance
 execution/scripts/simctl status
-execution/scripts/simctl force-enter BTC/USDT:USDT long 50 1
+execution/scripts/simctl force-enter SOL/USDT:USDT long 50 1
 ```
 
 当前策略问题清单见：
@@ -89,7 +89,7 @@ execution/scripts/simctl force-enter BTC/USDT:USDT long 50 1
 ### 本地研究脚本
 
 ```bash
-python3 research/experiments/multi_trend_backtest.py --symbol BTC-USDT --timeframe 15m
+python3 research/experiments/multi_trend_backtest.py --symbol SOL-USDT --timeframe 15m
 ```
 
 ## 重要边界

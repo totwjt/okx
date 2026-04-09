@@ -133,6 +133,12 @@ execution/scripts/simctl status
 
 `MultiLS`、`LongShortSwitch`、`TrendFollowing` 等文件可视为历史迭代痕迹，不再作为当前主线维护。
 
+当前主线唯一允许的策略接入链是：
+
+- `spec -> profile -> generated -> auto_json -> docker运行`
+
+独立实验策略不再继续放在 `strategies/` 主目录，统一转入 `research/experiments/` 或 `research/archive/`。
+
 ## 当前已知状态
 
 - 当前默认策略为 `MultiLsV2Strategy`

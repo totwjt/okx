@@ -158,23 +158,43 @@ def update_profile_status(name: str, spec: dict, profile_name: str, to_status: s
 
 
 def build_profile_from_hyperopt(name: str, profile_name: str, hyperopt_filename: str, params: dict) -> dict:
-    overrides = {
-        "factors": {
-            "ma": {"period": params["params"]["ma_period"]},
-            "rsi": {"period": params["params"]["rsi_period"]},
-            "rsi_oversold": {"value": params["params"]["rsi_oversold"]},
-            "rsi_overbought": {"value": params["params"]["rsi_overbought"]},
-        },
-        "stoploss": params["stoploss"],
-        "minimal_roi": params["minimal_roi"],
-        "trailing_stop": params["trailing_stop"],
-        "trailing_stop_positive": params["trailing_stop_positive"],
-        "trailing_stop_positive_offset": params["trailing_stop_positive_offset"],
-        "trailing_only_offset_is_reached": params["trailing_only_offset_is_reached"],
-        "risk_model": {
-            "max_open_trades": params["max_open_trades"],
-        },
-    }
+    hp_params = params.get("params", {})
+    factor_overrides: dict[str, dict] = {}
+    if "ma_period" in hp_params:
+        factor_overrides["ma"] = {"period": hp_params["ma_period"]}
+    if "rsi_period" in hp_params:
+        factor_overrides.setdefault("rsi", {})
+        factor_overrides["rsi"]["period"] = hp_params["rsi_period"]
+    if "rsi_oversold" in hp_params:
+        factor_overrides["rsi_oversold"] = {"value": hp_params["rsi_oversold"]}
+    if "rsi_overbought" in hp_params:
+        factor_overrides["rsi_overbought"] = {"value": hp_params["rsi_overbought"]}
+    if "bb_period" in hp_params or "bb_std" in hp_params:
+        factor_overrides.setdefault("bb", {})
+        if "bb_period" in hp_params:
+            factor_overrides["bb"]["period"] = hp_params["bb_period"]
+        if "bb_std" in hp_params:
+            factor_overrides["bb"]["std"] = hp_params["bb_std"]
+    if "volume_ma_period" in hp_params or "volume_ratio_threshold" in hp_params:
+        factor_overrides.setdefault("volume", {})
+        if "volume_ma_period" in hp_params:
+            factor_overrides["volume"]["ma_period"] = hp_params["volume_ma_period"]
+        if "volume_ratio_threshold" in hp_params:
+            factor_overrides["volume"]["ratio_threshold"] = hp_params["volume_ratio_threshold"]
+
+    overrides = {"factors": factor_overrides}
+    for key in [
+        "stoploss",
+        "minimal_roi",
+        "trailing_stop",
+        "trailing_stop_positive",
+        "trailing_stop_positive_offset",
+        "trailing_only_offset_is_reached",
+    ]:
+        if key in params:
+            overrides[key] = params[key]
+    if "max_open_trades" in params:
+        overrides["risk_model"] = {"max_open_trades": params["max_open_trades"]}
     return {
         "profile_name": profile_name,
         "strategy_name": name,

@@ -1,0 +1,61 @@
+profile_name: paper_baseline
+strategy_name: multi_ls_v3
+status: paper_active
+source: profile:default
+updated_at: '2026-04-09T07:03:20.414185+00:00'
+overrides:
+  factors:
+    rsi:
+      period: 14
+    rsi_oversold:
+      value: 30
+    rsi_overbought:
+      value: 70
+    bb:
+      period: 20
+      std: 2.0
+    volume:
+      ma_period: 20
+      ratio_threshold: 0.95
+  stoploss: -0.12
+  minimal_roi:
+    '0': 0.09
+    '90': 0.03
+    '240': 0.0
+  trailing_stop: false
+  risk_model:
+    max_open_trades: 3
+validation:
+  last_result:
+    profile_name: paper_baseline
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_07-03-19.zip
+    metrics:
+      total_trades: 30
+      profit_total: -0.01682465892
+      profit_total_abs: -16.824658919999997
+      profit_factor: 0.6804721274104244
+      wins: 12
+      losses: 13
+      draws: 5
+      winrate: 0.4
+      avg_profit: -0.001689713804287402
+      expectancy_ratio: -0.305128744788816
+      max_drawdown_account: 0.018780344055258236
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.4918032786885246
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks:
+    - profit_total=-0.016825 < min_profit=0.000000
+    - profit_factor=0.6805 < min_profit_factor=1.0000
+    - avg_profit=-0.001690 < min_avg_profit=0.000000
+    warnings: []
+    passed: false

@@ -1,0 +1,151 @@
+name: Multi-LS V3
+description: 多空结构化策略 V3（Regime + TrendBreakout + RangeReversal + RiskBudget）
+version: '3.0'
+
+trading_mode: futures
+margin_mode: isolated
+timeframe: 15m
+can_short: true
+
+stoploss: -0.12
+minimal_roi:
+  '0': 0.09
+  '90': 0.03
+  '240': 0.0
+trailing_stop: false
+
+cost_model:
+  fee: 0.001
+  slippage_bps: 5
+  funding_rate_included: false
+  notes:
+  - 回测已接入 fee
+  - slippage/funding 仍需执行层与研究层补充
+
+risk_model:
+  max_open_trades: 3
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 22.0
+  max_consecutive_losses: 3
+  cooldown_candles_after_loss_streak: 12
+  protections_in_config_required: true
+
+factors:
+  ma:
+    enabled: false
+    period: 200
+    range: [80, 280]
+    space: buy
+    type: EMA
+  rsi:
+    enabled: true
+    period: 14
+    range: [7, 21]
+    space: buy
+  rsi_oversold:
+    enabled: true
+    value: 30
+    range: [18, 40]
+    space: buy
+  rsi_overbought:
+    enabled: true
+    value: 70
+    range: [60, 85]
+    space: sell
+  bb:
+    enabled: true
+    period: 20
+    std: 2.0
+    std_range: [1.6, 2.8]
+  volume:
+    enabled: true
+    ma_period: 20
+    ratio_threshold: 0.95
+  macd:
+    enabled: false
+    fast: 12
+    slow: 26
+    signal: 9
+
+derived_indicators:
+  - name: ema_fast
+    formula: ta.EMA(dataframe['close'], timeperiod=21)
+  - name: ema_slow
+    formula: ta.EMA(dataframe['close'], timeperiod=55)
+  - name: ema_trend
+    formula: ta.EMA(dataframe['close'], timeperiod=180)
+  - name: adx
+    formula: ta.ADX(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=14)
+  - name: atr
+    formula: ta.ATR(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=14)
+  - name: atr_pct
+    formula: dataframe['atr'] / dataframe['close'].replace(0, np.nan)
+  - name: bb_width
+    formula: (dataframe['bb_upper'] - dataframe['bb_lower']) / dataframe['bb_middle'].replace(0, np.nan)
+  - name: rsi_slope
+    formula: dataframe['rsi'].diff(2)
+  - name: donchian_high
+    formula: dataframe['high'].rolling(20).max()
+  - name: donchian_low
+    formula: dataframe['low'].rolling(20).min()
+
+entry_conditions:
+  long: |
+    (
+      (
+        (dataframe['ema_fast'] > dataframe['ema_slow']) &
+        (dataframe['close'] > dataframe['ema_trend']) &
+        (dataframe['adx'] >= 24) &
+        (dataframe['bb_width'] >= 0.028) &
+        (dataframe['close'] > dataframe['donchian_high'].shift(1))
+      ) |
+      (
+        (dataframe['adx'] <= 16) &
+        (dataframe['bb_width'] <= 0.022) &
+        (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &
+        (dataframe['rsi'] <= 30) &
+        (dataframe['rsi_slope'] > 0)
+      )
+    ) &
+    (dataframe['atr_pct'] < 0.032)
+  short: |
+    (
+      (
+        (dataframe['ema_fast'] < dataframe['ema_slow']) &
+        (dataframe['close'] < dataframe['ema_trend']) &
+        (dataframe['adx'] >= 24) &
+        (dataframe['bb_width'] >= 0.028) &
+        (dataframe['close'] < dataframe['donchian_low'].shift(1))
+      ) |
+      (
+        (dataframe['adx'] <= 16) &
+        (dataframe['bb_width'] <= 0.022) &
+        (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &
+        (dataframe['rsi'] >= 70) &
+        (dataframe['rsi_slope'] < 0)
+      )
+    ) &
+    (dataframe['atr_pct'] < 0.032)
+
+exit_conditions:
+  long: |
+    (
+      ((dataframe['ema_fast'] > dataframe['ema_slow']) & (dataframe['close'] < dataframe['ema_fast'])) |
+      ((dataframe['adx'] <= 16) & (dataframe['close'] >= dataframe['bb_middle'])) |
+      (dataframe['atr_pct'] >= 0.032)
+    )
+  short: |
+    (
+      ((dataframe['ema_fast'] < dataframe['ema_slow']) & (dataframe['close'] > dataframe['ema_fast'])) |
+      ((dataframe['adx'] <= 16) & (dataframe['close'] <= dataframe['bb_middle'])) |
+      (dataframe['atr_pct'] >= 0.032)
+    )
+
+optimization:
+  epochs: 300
+  hyperopt_loss: ShortTradeDurHyperOptLoss
+  timerange: 20250101-20250930
+
+train_timerange: 20250101-20250930
+validation_timerange: 20251001-20251130
+test_timerange: 20251201-

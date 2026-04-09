@@ -21,22 +21,22 @@ class MultiLsV2Strategy(IStrategy):
     can_short = True
     timeframe = "15m"
 
-    stoploss = -0.251
-    minimal_roi = {"0": 0.253, "73": 0.118, "217": 0.043, "298": 0}
+    stoploss = -0.08
+    minimal_roi = {"0": 0.018, "45": 0.01, "180": 0.004, "360": 0}
 
     trailing_stop = True
-    trailing_stop_positive = 0.147
-    trailing_stop_positive_offset = 0.149
+    trailing_stop_positive = 0.01
+    trailing_stop_positive_offset = 0.015
 
     process_only_new_candles = True
     use_exit_signal = True
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    ma_period = IntParameter(100, 300, default=276, space="buy")
-    rsi_period = IntParameter(7, 21, default=15, space="buy")
-    rsi_oversold = DecimalParameter(20, 35, default=26.6, decimals=1, space="buy")
-    rsi_overbought = DecimalParameter(65, 80, default=78.6, decimals=1, space="sell")
+    ma_period = IntParameter(100, 300, default=235, space="buy")
+    rsi_period = IntParameter(7, 21, default=12, space="buy")
+    rsi_oversold = DecimalParameter(20, 35, default=29.5, decimals=1, space="buy")
+    rsi_overbought = DecimalParameter(65, 80, default=74.5, decimals=1, space="sell")
 
     startup_candle_count = 300
 
@@ -67,6 +67,8 @@ class MultiLsV2Strategy(IStrategy):
         dataframe['ma'] = ta.SMA(dataframe['close'], timeperiod=self.ma_period.value)
         dataframe['rsi'] = ta.RSI(dataframe['close'], timeperiod=self.rsi_period.value)
         dataframe['ma_slope'] = dataframe['ma'].diff(3)
+        dataframe['rsi_slope'] = dataframe['rsi'].diff(2)
+        dataframe['price_momentum'] = dataframe['close'].pct_change(2)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -91,10 +93,10 @@ class MultiLsV2Strategy(IStrategy):
         rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
         rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
 
-        exit_long_condition = (dataframe['rsi'] > rsi_overbought) | (dataframe['close'] < dataframe['ma']) 
+        exit_long_condition = ((dataframe['rsi'] > rsi_overbought) & (dataframe['rsi_slope'] < 0)) | ((dataframe['ma_slope'] <= 0) & (dataframe['price_momentum'] < 0) & (dataframe['rsi'] > 50)) 
         dataframe.loc[exit_long_condition, 'exit_long'] = 1
 
-        exit_short_condition = (dataframe['rsi'] < rsi_oversold) | (dataframe['close'] > dataframe['ma']) 
+        exit_short_condition = ((dataframe['rsi'] < rsi_oversold) & (dataframe['rsi_slope'] > 0)) | ((dataframe['ma_slope'] >= 0) & (dataframe['price_momentum'] > 0) & (dataframe['rsi'] < 50)) 
         dataframe.loc[exit_short_condition, 'exit_short'] = 1
 
         return dataframe

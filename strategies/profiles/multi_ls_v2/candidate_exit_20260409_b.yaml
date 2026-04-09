@@ -1,0 +1,61 @@
+profile_name: candidate_exit_20260409_b
+strategy_name: multi_ls_v2
+status: candidate
+source: profile:candidate_exit_20260409_a
+updated_at: '2026-04-09T03:02:04.253192+00:00'
+overrides:
+  factors:
+    ma:
+      period: 220
+    rsi:
+      period: 12
+    rsi_oversold:
+      value: 33.5
+    rsi_overbought:
+      value: 69.0
+  stoploss: -0.08
+  minimal_roi:
+    '0': 0.018
+    '45': 0.01
+    '180': 0.004
+    '360': 0
+  trailing_stop: true
+  trailing_stop_positive: 0.01
+  trailing_stop_positive_offset: 0.015
+  trailing_only_offset_is_reached: true
+  risk_model:
+    max_open_trades: 3
+validation:
+  last_result:
+    profile_name: candidate_exit_20260409_b
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_03-02-03.zip
+    metrics:
+      total_trades: 28
+      profit_total: -0.013286033860000001
+      profit_total_abs: -13.286033860000002
+      profit_factor: 0.6475636439202523
+      wins: 13
+      losses: 13
+      draws: 2
+      winrate: 0.4642857142857143
+      avg_profit: -0.0014770809964558967
+      expectancy_ratio: -0.23505973675131142
+      max_drawdown_account: 0.026065451601592748
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.45901639344262296
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks:
+    - profit_total=-0.013286 < min_profit=0.000000
+    - profit_factor=0.6476 < min_profit_factor=1.0000
+    - avg_profit=-0.001477 < min_avg_profit=0.000000
+    warnings: []
+    passed: false

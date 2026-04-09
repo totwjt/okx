@@ -22,6 +22,9 @@ execution/scripts/simctl up
 execution/scripts/simctl ps
 execution/scripts/simctl ping
 execution/scripts/simctl summary
+execution/scripts/simctl baseline-report 200
+execution/scripts/simctl paper-run-start okx_paper_20260408
+execution/scripts/simctl paper-run-report okx_paper_20260408
 execution/scripts/simctl show-config
 execution/scripts/simctl balance
 execution/scripts/simctl profit
@@ -67,6 +70,31 @@ execution/scripts/simctl summary
 execution/scripts/simctl recent-trades-summary 5
 execution/scripts/simctl daily-report 7
 ```
+
+如果想快速判断当前 `REST` 基线是否还健康，可直接看：
+
+```bash
+execution/scripts/simctl baseline-report 200
+```
+
+它会额外检查：
+
+- `dry_run` 是否仍为 `true`
+- `exchange.enable_ws` 是否仍为 `false`
+- REST API 是否可读余额、收益和持仓
+- 最近日志里是否出现 `ERROR`、`Traceback`、`1006`、`timeout`、`watch_ohlcv` 等告警信号
+- 当前是否已经积累自然成交样本
+
+如果要正式开始一轮“模拟实盘观察期”，使用：
+
+```bash
+execution/scripts/simctl paper-run-start okx_paper_20260408
+execution/scripts/simctl paper-run-report okx_paper_20260408
+```
+
+对应方案说明见：
+
+- [docs/operations/paper-run-plan.md](/Users/wangjiangtao/Documents/AI/AI-OuYi/docs/operations/paper-run-plan.md)
 
 如果想看策略表现拆解：
 

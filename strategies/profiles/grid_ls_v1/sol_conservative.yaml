@@ -1,0 +1,65 @@
+profile_name: sol_conservative
+strategy_name: grid_ls_v1
+status: candidate
+source: symbol_profile:SOL
+updated_at: '2026-04-09T07:41:09.281282+00:00'
+overrides:
+  factors:
+    ma:
+      period: 84
+    rsi:
+      period: 16
+    rsi_oversold:
+      value: 27.5
+    rsi_overbought:
+      value: 72.5
+    bb:
+      period: 52
+      std: 2.5
+    volume:
+      ma_period: 26
+      ratio_threshold: 1.15
+  stoploss: -0.07
+  minimal_roi:
+    '0': 0.015
+    '150': 0.005
+    '420': 0.0
+  trailing_stop: true
+  trailing_stop_positive: 0.007
+  trailing_stop_positive_offset: 0.014
+  risk_model:
+    max_open_trades: 2
+validation:
+  last_result:
+    profile_name: sol_conservative
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_07-41-08.zip
+    metrics:
+      total_trades: 4
+      profit_total: -0.012482208219999995
+      profit_total_abs: -12.482208219999995
+      profit_factor: 0.47754481719668423
+      wins: 3
+      losses: 1
+      draws: 0
+      winrate: 0.75
+      avg_profit: -0.009279243172116744
+      expectancy_ratio: -0.13061379570082887
+      max_drawdown_account: 0.023773927949218666
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.06557377049180328
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks:
+    - profit_total=-0.012482 < min_profit=0.000000
+    - profit_factor=0.4775 < min_profit_factor=1.0000
+    - avg_profit=-0.009279 < min_avg_profit=0.000000
+    warnings: []
+    passed: false

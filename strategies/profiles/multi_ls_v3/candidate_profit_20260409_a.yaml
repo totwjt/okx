@@ -1,0 +1,65 @@
+profile_name: candidate_profit_20260409_a
+strategy_name: multi_ls_v3
+status: candidate
+source: hyperopt:strategy_MultiLsV3Strategy_2026-04-09_07-19-46.fthypt
+updated_at: '2026-04-09T07:21:55.030665+00:00'
+overrides:
+  factors:
+    rsi:
+      period: 13
+    rsi_oversold:
+      value: 24.0
+    rsi_overbought:
+      value: 84.1
+    bb:
+      period: 16
+      std: 1.7
+    volume:
+      ma_period: 12
+      ratio_threshold: 2.0
+  stoploss: -0.13
+  minimal_roi:
+    '0': 0.224
+    '54': 0.123
+    '113': 0.019
+    '180': 0
+  trailing_stop: false
+  trailing_stop_positive: 0.01
+  trailing_stop_positive_offset: 0.015
+  trailing_only_offset_is_reached: false
+  risk_model:
+    max_open_trades: 3
+validation:
+  last_result:
+    profile_name: candidate_profit_20260409_a
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_07-21-54.zip
+    metrics:
+      total_trades: 17
+      profit_total: -0.0011999008999999984
+      profit_total_abs: -1.1999008999999985
+      profit_factor: 0.9566499973284259
+      wins: 10
+      losses: 6
+      draws: 1
+      winrate: 0.5882352941176471
+      avg_profit: -0.00020594561959140257
+      expectancy_ratio: -0.07412353035467334
+      max_drawdown_account: 0.012001605628318363
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.2786885245901639
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks:
+    - profit_total=-0.001200 < min_profit=0.000000
+    - profit_factor=0.9566 < min_profit_factor=1.0000
+    - avg_profit=-0.000206 < min_avg_profit=0.000000
+    warnings: []
+    passed: false

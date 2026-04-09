@@ -1,0 +1,31 @@
+profile_name: default
+strategy_name: grid_ls_v1
+status: draft
+source: spec_defaults
+updated_at: '2026-04-09T08:00:00+00:00'
+overrides:
+  factors:
+    ma:
+      period: 72
+    rsi:
+      period: 14
+    rsi_oversold:
+      value: 31
+    rsi_overbought:
+      value: 69
+    bb:
+      period: 48
+      std: 2.2
+    volume:
+      ma_period: 24
+      ratio_threshold: 1.0
+  stoploss: -0.08
+  minimal_roi:
+    '0': 0.018
+    '120': 0.006
+    '360': 0.0
+  trailing_stop: true
+  trailing_stop_positive: 0.009
+  trailing_stop_positive_offset: 0.016
+  risk_model:
+    max_open_trades: 4

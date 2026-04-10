@@ -1,0 +1,4 @@
+FROM freqtradeorg/freqtrade:stable
+
+# Ensure requests-based paths (used by some ccxt sync endpoints) can use socks5h proxy.
+RUN pip install --no-cache-dir "requests[socks]" pysocks

@@ -1,7 +1,7 @@
 ---
 services:
   freqtrade:
-    image: freqtradeorg/freqtrade:stable
+    image: ai-ouyi/freqtrade:proxy
     # image: freqtradeorg/freqtrade:develop
     # Use plotting image
     # image: freqtradeorg/freqtrade:develop_plot
@@ -14,10 +14,11 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
-    # Build step - only needed when additional dependencies are needed
-    # build:
-    #   context: .
-    #   dockerfile: "./docker/Dockerfile.custom"
+    # Build custom image to ensure all API clients (including requests/ccxt sync path)
+    # support SOCKS proxy routing.
+    build:
+      context: .
+      dockerfile: "./docker/Dockerfile.custom"
     restart: unless-stopped
     container_name: freqtrade
     env_file:

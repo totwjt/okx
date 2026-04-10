@@ -79,8 +79,8 @@ Docker 常用命令：
 
 ```bash
 docker compose -f execution/freqtrade/docker-compose.yml up -d freqtrade
-docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s GridLsV1Strategy
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s GridLsV1Strategy
 docker logs -f freqtrade
 execution/scripts/simctl up
 execution/scripts/simctl balance
@@ -127,11 +127,15 @@ execution/scripts/simctl status
 
 ## 当前研究方向
 
-仓库当前只保留一条策略主线：
+仓库当前的主线生成链至少包括：
 
-1. `MultiLsV2Strategy`
+1. `grid_ls_v1`
+2. `multi_ls_v2`
+3. `multi_ls_v3`
 
-`MultiLS`、`LongShortSwitch`、`TrendFollowing` 等文件可视为历史迭代痕迹，不再作为当前主线维护。
+其中运行默认值以 `execution/freqtrade/docker-compose.yml` 和显式命令参数为准，不应再把某一个策略类名写成永远唯一的主线事实。
+
+`MultiLS`、`LongShortSwitch`、`TrendFollowing` 等文件可视为更早期迭代痕迹，不再作为当前主线维护。
 
 当前主线唯一允许的策略接入链是：
 
@@ -141,8 +145,8 @@ execution/scripts/simctl status
 
 ## 当前已知状态
 
-- 当前默认策略为 `MultiLsV2Strategy`
-- Docker 默认启动策略已切到多空主线
+- 当前 `docker compose up` 默认启动策略为 `GridLsV1Strategy`
+- 仓库内同时维护多条生成链，不能再把某一条写成唯一主线策略
 - `Freqtrade protections` 已接入基础保护: `CooldownPeriod`、`StoplossGuard`、`MaxDrawdown`
 - 文档、策略类名、Docker 副本之间存在一定漂移，需要核对后再行动
 - 针对 `funding_rate` 这类合约因子，仓库已经开始引入外部数据文件读取路径，不再默认依赖单一内建下载链路
@@ -224,4 +228,4 @@ OpenCode 会优先加载：
 - `.opencode/knowledge-base/project-structure-plan.md`
 
 ---
-最后更新: 2026-04-02
+最后更新: 2026-04-10

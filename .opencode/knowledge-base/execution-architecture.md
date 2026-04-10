@@ -5,7 +5,7 @@
 当前项目的主执行层选择如下：
 
 1. `Freqtrade` 作为主交易执行框架
-2. `strategies/` 下的 `MultiLsV2Strategy` 作为唯一主线策略
+2. `strategies/` 是唯一策略源码目录；当前运行默认策略由 `execution/freqtrade/docker-compose.yml` 决定，当前为 `GridLsV1Strategy`
 3. `apps/prototypes/freqtrade_bot/realtime_bot.py` 仅保留为原型参考，不作为当前生产执行主线
 
 补充说明：
@@ -46,7 +46,9 @@
 
 - `execution/freqtrade/docker-compose.yml`
 - `execution/freqtrade/user_data/config.json`
+- `strategies/auto_grid_ls_v1.py`
 - `strategies/auto_multi_ls_v2.py`
+- `strategies/auto_multi_ls_v3.py`
 - `strategies/cli.py`
 
 ### 推荐独立数据层

@@ -32,11 +32,12 @@
 
 改动前至少检查：
 
-1. 当前主线策略是否仍是 `MultiLsV2Strategy`
+1. `execution/freqtrade/docker-compose.yml` 当前默认启动的是哪个策略类名
 2. `strategies/` 是否仍是唯一策略源码目录
-3. YAML 是否仍是参数主来源
-4. 当前回测是否仍采用 train / validation / test
-5. 成本模型和风险模型是否仍在 YAML 中显式维护
+3. `strategies/spec/` 下当前有哪些在维护的策略 slug
+4. YAML 是否仍是参数主来源
+5. 当前回测是否仍采用 train / validation / test
+6. 成本模型和风险模型是否仍在 YAML 中显式维护
 
 ## 3. 修改规则
 
@@ -52,12 +53,12 @@
 ### 改策略
 
 - 只改 `strategies/`
-- 优先改 `spec/multi_ls_v2.yaml`
+- 优先改对应策略的 `spec/<strategy>.yaml`
 - 需要时再重新生成代码
 
 ### 改参数
 
-- 先改 `spec/multi_ls_v2.yaml`
+- 先改对应策略的 `spec/<strategy>.yaml` 或 `profiles/<strategy>/`
 - 不要再引入第二套参数来源
 
 ### 改回测流程

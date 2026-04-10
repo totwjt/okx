@@ -27,16 +27,18 @@
 
 - `execution/freqtrade/docker-compose.yml`
 
-当前唯一主线策略：
+当前运行策略以以下事实为准：
 
-- `MultiLsV2Strategy`
+- `execution/freqtrade/docker-compose.yml` 当前默认启动 `GridLsV1Strategy`
+- `strategies/spec/` 当前存在 `grid_ls_v1`、`multi_ls_v2`、`multi_ls_v3` 三条生成链
+- 具体执行时，如命令显式传入 `-s <StrategyClass>`，以显式指定为准
 
 常用命令：
 
 ```bash
 docker compose -f execution/freqtrade/docker-compose.yml up -d freqtrade
-docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s GridLsV1Strategy
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s GridLsV1Strategy
 docker logs -f freqtrade
 ```
 
@@ -81,8 +83,8 @@ AI-OuYi/
 
 ## 当前状态
 
-- 仓库当前只保留一个多空主线策略: `MultiLsV2Strategy`。
-- `MultiLS`、`LongShortSwitch`、`TrendFollowing` 等历史变体已退出主线，不再继续演进。
+- 仓库当前已落地的主线生成链至少包含：`grid_ls_v1`、`multi_ls_v2`、`multi_ls_v3`。
+- `MultiLS`、`LongShortSwitch`、`TrendFollowing` 等更早期命名仍应视为历史变体，不再作为当前主线事实来源。
 - `Freqtrade` 是当前主执行层，`apps/prototypes/freqtrade_bot/realtime_bot.py` 仅保留为原型参考。
 
 ## 建议的阅读顺序

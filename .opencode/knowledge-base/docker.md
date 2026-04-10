@@ -28,13 +28,13 @@ docker exec -it freqtrade /bin/bash
 
 ```bash
 # 回测
-docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker exec freqtrade freqtrade backtesting -c /freqtrade/user_data/config.json -s GridLsV1Strategy
 
 # 模拟盘
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy --dry-run
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s GridLsV1Strategy --dry-run
 
 # 实盘（谨慎！）
-docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s MultiLsV2Strategy
+docker exec freqtrade freqtrade trade -c /freqtrade/user_data/config.json -s GridLsV1Strategy
 ```
 
 ### 查看日志
@@ -83,6 +83,7 @@ docker compose -f execution/freqtrade/docker-compose.yml restart
 3. **数据持久化** - `execution/freqtrade/user_data/` 目录挂载到容器，容器删除后数据保留
 4. **日志大小** - 定期清理: `docker system prune`
 5. **策略单一事实来源** - 只维护仓库根目录 `strategies/`
+6. **默认策略不要写死到别的文档** - 当前 `docker compose up` 默认策略以 `execution/freqtrade/docker-compose.yml` 为准，显式 `-s` 命令再覆盖
 
 ---
-*最后更新: 2026-04-02*
+*最后更新: 2026-04-10*

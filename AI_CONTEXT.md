@@ -7,16 +7,17 @@
 ## 接手时先确认的 5 件事
 
 1. 当前真实运行目录是不是 `execution/freqtrade/user_data/`
-2. 容器 `freqtrade` 是否仍以 `GridLsV1Strategy` 作为默认启动策略
+2. 容器 `freqtrade` 当前默认启动的是哪个策略类名
 3. Docker 是否仍把本地 `strategies/` 直接挂载到容器策略目录
 4. 最近回测结果对应的是哪一个策略类名
 5. 这次任务是否允许修改功能代码，还是只允许修改文档/配置/AI 文件
 
 ## 当前仓库状态
 
-- `execution/freqtrade/docker-compose.yml` 默认通过 `trade` 启动 `GridLsV1Strategy`
+- `execution/freqtrade/docker-compose.yml` 当前默认通过 `trade` 启动 `GridLsV1Strategy`
 - 本地 `strategies/` 是唯一策略源码目录，并直接挂载进 Docker
 - 当前版本判断以 Docker 环境为准；关于本地 package 安装引发的旧兼容性记忆，不作为当前判断依据
+- 当前生成链下至少存在 `grid_ls_v1`、`multi_ls_v2`、`multi_ls_v3` 三个策略族；默认启动策略不等于唯一策略事实
 - 历史回测里可能还会看到 `MultiLSStrategy`、`LongShortSwitchStrategy` 等旧名字，它们不再是当前主线
 - `execution/templates/freqtrade_user_data/` 是模板目录，不是主要运行目录
 - 当前执行架构决策: `Freqtrade` 为主执行层，自定义 OKX 机器人仅为原型参考
@@ -85,6 +86,7 @@ execution/scripts/simctl force-enter SOL/USDT:USDT long 50 1
 - `strategies/spec/` 管策略结构与默认值
 - `strategies/profiles/` 管具体参数档案与 active profile
 - `strategies/cli.py profile ...` 管 profile 创建、激活与晋级
+- 当前活跃 profile 需要按各自策略目录分别核对，例如 `strategies/profiles/*/_active.yaml`
 
 ### 本地研究脚本
 

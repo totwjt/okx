@@ -4,7 +4,13 @@
 
 AI 量化交易策略管理工具，当前聚焦 OKX 合约多空切换策略，支持通过 YAML 配置文件定义策略，自动生成代码，一键回测和参数优化。
 
-当前默认运行策略为 `GridLsV1Strategy`（SOL 网格均值回归基线）。
+当前 `docker compose up` 默认运行策略为 `GridLsV1Strategy`（SOL 网格均值回归基线），但仓库当前并不只有这一条策略生成链。
+
+当前已存在的主线策略 slug 包括：
+
+- `grid_ls_v1`
+- `multi_ls_v2`
+- `multi_ls_v3`
 
 当前主线唯一允许的策略接入方式是：
 
@@ -41,6 +47,7 @@ AI 量化交易策略管理工具，当前聚焦 OKX 合约多空切换策略，
 strategies/
 ├── spec/                      # 策略配置文件 (YAML)
 │   ├── multi_ls_v2.yaml     # 多空切换策略 V2
+│   ├── multi_ls_v3.yaml     # 多空结构化策略 V3
 │   └── grid_ls_v1.yaml      # 网格均值回归策略 V1
 ├── profiles/                  # 参数档案与激活指针
 │   ├── multi_ls_v2/
@@ -49,7 +56,9 @@ strategies/
 │       ├── paper_baseline.yaml
 │       └── _active.yaml
 ├── generated/                 # 自动生成的策略代码
-│   └── multi_ls_v2.py
+│   ├── grid_ls_v1.py
+│   ├── multi_ls_v2.py
+│   └── multi_ls_v3.py
 ├── templates/                # 策略模板
 │   └── base_strategy.py
 ├── cli.py                    # 策略管理 CLI 工具

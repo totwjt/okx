@@ -33,5 +33,15 @@ venv/
 *.swo
 data/
 ft_userdata/
-user_data/
 freqtrade_env/
+
+# Freqtrade runtime data
+execution/freqtrade/user_data/*
+!execution/freqtrade/user_data/config.example.json
+
+# Keep only versionable templates, never generated result payloads
+execution/templates/freqtrade_user_data/backtest_results/*
+!execution/templates/freqtrade_user_data/backtest_results/.gitkeep
+
+# Archived runtime snapshots
+research/archive/resets/*/user_data/

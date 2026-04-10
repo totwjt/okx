@@ -1,0 +1,62 @@
+profile_name: candidate_pf_20260409_b
+strategy_name: grid_ls_v1
+status: candidate
+source: profile:sol_aggressive
+updated_at: '2026-04-09T08:05:07.793474+00:00'
+overrides:
+  factors:
+    ma:
+      period: 54
+    rsi:
+      period: 11
+    rsi_oversold:
+      value: 33.0
+    rsi_overbought:
+      value: 67.0
+    bb:
+      period: 38
+      std: 2.0
+    volume:
+      ma_period: 16
+      ratio_threshold: 0.95
+  stoploss: -0.1
+  minimal_roi:
+    '0': 0.024
+    '60': 0.008
+    '240': 0.0
+  trailing_stop: true
+  trailing_stop_positive: 0.01
+  trailing_stop_positive_offset: 0.016
+  risk_model:
+    max_open_trades: 4
+validation:
+  last_result:
+    profile_name: candidate_pf_20260409_b
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_08-05-07.zip
+    metrics:
+      total_trades: 49
+      profit_total: 0.025196899250000005
+      profit_total_abs: 25.196899250000005
+      profit_factor: 1.2731086620883398
+      wins: 35
+      losses: 10
+      draws: 4
+      winrate: 0.7142857142857143
+      avg_profit: 0.0016328545347236159
+      expectancy_ratio: -0.02589619141054289
+      max_drawdown_account: 0.0420529595323215
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.8032786885245902
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks: []
+    warnings: []
+    passed: true

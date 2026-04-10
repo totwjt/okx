@@ -1,0 +1,62 @@
+profile_name: candidate_pf_20260409_w
+strategy_name: grid_ls_v1
+status: paper_active
+source: profile:candidate_pf_20260409_o
+updated_at: '2026-04-09T09:51:23.668834+00:00'
+overrides:
+  factors:
+    ma:
+      period: 54
+    rsi:
+      period: 11
+    rsi_oversold:
+      value: 34.0
+    rsi_overbought:
+      value: 66.0
+    bb:
+      period: 38
+      std: 1.9
+    volume:
+      ma_period: 16
+      ratio_threshold: 0.9
+  stoploss: -0.11
+  minimal_roi:
+    '0': 0.0322
+    '60': 0.0118
+    '240': 0.0
+  trailing_stop: true
+  trailing_stop_positive: 0.012
+  trailing_stop_positive_offset: 0.02
+  risk_model:
+    max_open_trades: 4
+validation:
+  last_result:
+    profile_name: candidate_pf_20260409_w
+    timerange: 20251001-20251130
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_09-41-53.zip
+    metrics:
+      total_trades: 59
+      profit_total: 0.07405527384
+      profit_total_abs: 74.05527384
+      profit_factor: 1.679473568341961
+      wins: 42
+      losses: 9
+      draws: 8
+      winrate: 0.711864406779661
+      avg_profit: 0.0037871733738520275
+      expectancy_ratio: -0.03194470991393816
+      max_drawdown_account: 0.048838798735602325
+      stake_currency: USDT
+    validation_days: 61
+    trades_per_day: 0.9672131147540983
+    gate:
+      min_trades: 1
+      min_profit: 0.0
+      min_profit_factor: 1.0
+      max_drawdown: 0.3
+      min_winrate: 0.0
+      min_avg_profit: 0.0
+      min_trades_per_day: 0.0
+    failed_checks: []
+    warnings: []
+    passed: true

@@ -1,8 +1,8 @@
 profile_name: sol_aggressive
 strategy_name: grid_ls_v1
-status: candidate
+status: validated
 source: symbol_profile:SOL
-updated_at: '2026-04-09T07:41:20.450909+00:00'
+updated_at: '2026-04-09T07:58:58.439187+00:00'
 overrides:
   factors:
     ma:
@@ -33,7 +33,7 @@ validation:
   last_result:
     profile_name: sol_aggressive
     timerange: 20251001-20251130
-    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_07-41-20.zip
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-09_07-58-57.zip
     metrics:
       total_trades: 46
       profit_total: 0.04430603923

@@ -21,8 +21,8 @@ class GridLsV1Strategy(IStrategy):
     can_short = True
     timeframe = "15m"
 
-    stoploss = -0.1
-    minimal_roi = {"0": 0.028, "60": 0.01, "240": 0.0}
+    stoploss = -0.11
+    minimal_roi = {"0": 0.0322, "60": 0.0118, "240": 0.0}
 
     trailing_stop = True
     trailing_stop_positive = 0.012
@@ -35,12 +35,12 @@ class GridLsV1Strategy(IStrategy):
 
     ma_period = IntParameter(30, 120, default=54, space="buy")
     rsi_period = IntParameter(7, 28, default=11, space="buy")
-    rsi_oversold = DecimalParameter(18, 40, default=33.0, decimals=1, space="buy")
-    rsi_overbought = DecimalParameter(60, 88, default=67.0, decimals=1, space="sell")
+    rsi_oversold = DecimalParameter(18, 40, default=34.0, decimals=1, space="buy")
+    rsi_overbought = DecimalParameter(60, 88, default=66.0, decimals=1, space="sell")
     bb_period = IntParameter(10, 50, default=38, space="buy")
-    bb_std = DecimalParameter(1.6, 3.2, default=2.0, decimals=1, space="buy")
+    bb_std = DecimalParameter(1.6, 3.2, default=1.9, decimals=1, space="buy")
     volume_ma_period = IntParameter(10, 30, default=16, space="buy")
-    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default=0.95, decimals=1, space="buy")
+    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default=0.9, decimals=1, space="buy")
 
     startup_candle_count = 300
 

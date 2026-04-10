@@ -1,6 +1,6 @@
 profile_name: sol_balanced
 strategy_name: grid_ls_v1
-status: paper_active
+status: candidate
 source: symbol_profile:SOL
 updated_at: '2026-04-09T07:41:13.196910+00:00'
 overrides:

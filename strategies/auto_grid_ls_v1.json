@@ -1,6 +1,6 @@
 {
   "strategy_name": "GridLsV1Strategy",
-  "profile_name": "sol_aggressive",
+  "profile_name": "candidate_pf_20260409_w",
   "params": {
     "max_open_trades": {
       "max_open_trades": 4
@@ -8,18 +8,18 @@
     "buy": {
       "ma_period": 54,
       "rsi_period": 11,
-      "rsi_oversold": 33.0
+      "rsi_oversold": 34.0
     },
     "sell": {
-      "rsi_overbought": 67.0
+      "rsi_overbought": 66.0
     },
     "roi": {
-      "0": 0.028,
-      "60": 0.01,
+      "0": 0.0322,
+      "60": 0.0118,
       "240": 0.0
     },
     "stoploss": {
-      "stoploss": -0.1
+      "stoploss": -0.11
     },
     "trailing": {
       "trailing_stop": true,
@@ -28,5 +28,5 @@
     }
   },
   "ft_stratparam_v": 1,
-  "export_time": "2026-04-09T07:41:13.493758+00:00"
+  "export_time": "2026-04-10T03:04:06.948152+00:00"
 }

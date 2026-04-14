@@ -18,7 +18,7 @@ from freqtrade.strategy import (
 class GridLsV1Strategy(IStrategy):
     INTERFACE_VERSION = 3
 
-    can_short = True
+    can_short = False
     timeframe = "15m"
 
     stoploss = -0.11
@@ -40,7 +40,7 @@ class GridLsV1Strategy(IStrategy):
     bb_period = IntParameter(10, 50, default=38, space="buy")
     bb_std = DecimalParameter(1.6, 3.2, default=1.9, decimals=1, space="buy")
     volume_ma_period = IntParameter(10, 30, default=16, space="buy")
-    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default=0.9, decimals=1, space="buy")
+    volume_ratio_threshold = DecimalParameter(0.5, 2.5, default=0.9, decimals=1, space="buy")
 
     startup_candle_count = 300
 
@@ -90,10 +90,10 @@ class GridLsV1Strategy(IStrategy):
         rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
         rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
 
-        long_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= rsi_oversold)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
+        long_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= self.rsi_oversold.value)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
         dataframe.loc[long_condition, 'enter_long'] = 1
 
-        short_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &   (dataframe['rsi'] >= rsi_overbought)  ) |  (   (dataframe['ema_fast'] < dataframe['ema_slow']) &   (dataframe['zscore'] >= 0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
+        short_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &   (dataframe['zscore'] >= 0.55) &   (dataframe['rsi'] >= self.rsi_overbought.value)  ) |  (   (dataframe['ema_fast'] < dataframe['ema_slow']) &   (dataframe['zscore'] >= 0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
         dataframe.loc[short_condition, 'enter_short'] = 1
 
         return dataframe

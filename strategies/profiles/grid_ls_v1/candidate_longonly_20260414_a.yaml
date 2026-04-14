@@ -1,9 +1,10 @@
-profile_name: candidate_pf_20260409_w
+profile_name: candidate_longonly_20260414_a
 strategy_name: grid_ls_v1
 status: paper_active
-source: profile:candidate_pf_20260409_o
-updated_at: '2026-04-14T01:17:00.017501+00:00'
+source: profile:candidate_pf_20260409_w
+updated_at: '2026-04-14T01:24:20.050923+00:00'
 overrides:
+  can_short: false
   factors:
     ma:
       period: 54
@@ -28,27 +29,27 @@ overrides:
   trailing_stop_positive: 0.012
   trailing_stop_positive_offset: 0.02
   risk_model:
-    max_open_trades: 4
+    max_open_trades: 3
 validation:
   last_result:
-    profile_name: candidate_pf_20260409_w
+    profile_name: candidate_longonly_20260414_a
     timerange: 20251001-20251130
-    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-14_01-16-59.zip
+    backtest_zip: /freqtrade/user_data/backtest_results/profile_validation/backtest-result-2026-04-14_01-23-58.zip
     metrics:
-      total_trades: 53
-      profit_total: 0.06536536499
-      profit_total_abs: 65.36536498999999
-      profit_factor: 1.6241217067560354
-      wins: 37
-      losses: 8
-      draws: 8
-      winrate: 0.6981132075471698
-      avg_profit: 0.0037554848060847345
-      expectancy_ratio: -0.056736346150032424
-      max_drawdown_account: 0.05323601757973236
+      total_trades: 36
+      profit_total: 0.09266740739
+      profit_total_abs: 92.66740739
+      profit_factor: 3.138109370720403
+      wins: 28
+      losses: 4
+      draws: 4
+      winrate: 0.7777777777777778
+      avg_profit: 0.0075639225031907875
+      expectancy_ratio: 0.1264565967467115
+      max_drawdown_account: 0.03675013430998026
       stake_currency: USDT
     validation_days: 61
-    trades_per_day: 0.8688524590163934
+    trades_per_day: 0.5901639344262295
     gate:
       min_trades: 1
       min_profit: 0.0

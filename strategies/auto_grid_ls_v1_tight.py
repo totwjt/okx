@@ -1,5 +1,5 @@
 """
-网格均值回归策略 V1（RangeGrid + TrendPullback，支持标的波动变体） V1.0 - Auto-generated strategy
+网格均值回归策略 V1 严格变体 - 更严格的入场条件，更小止盈，适用于低波动或机构主导标 V1.0 - Auto-generated strategy
 Trading Mode: futures
 """
 
@@ -15,32 +15,32 @@ from freqtrade.strategy import (
 )
 
 
-class GridLsV1Strategy(IStrategy):
+class GridLsV1TightStrategy(IStrategy):
     INTERFACE_VERSION = 3
 
-    can_short = False
+    can_short = True
     timeframe = "15m"
 
-    stoploss = -0.11
-    minimal_roi = {"0": 0.0322, "60": 0.0118, "240": 0.0}
+    stoploss = -0.06
+    minimal_roi = {"0": 0.012, "120": 0.005, "360": 0.0}
 
     trailing_stop = True
-    trailing_stop_positive = 0.012
-    trailing_stop_positive_offset = 0.02
+    trailing_stop_positive = 0.006
+    trailing_stop_positive_offset = 0.012
 
     process_only_new_candles = True
     use_exit_signal = True
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    ma_period = IntParameter(30, 120, default=54, space="buy")
-    rsi_period = IntParameter(7, 28, default=11, space="buy")
-    rsi_oversold = DecimalParameter(18, 40, default=34.0, decimals=1, space="buy")
-    rsi_overbought = DecimalParameter(60, 88, default=66.0, decimals=1, space="sell")
-    bb_period = IntParameter(10, 50, default=38, space="buy")
-    bb_std = DecimalParameter(1.6, 3.2, default=1.9, decimals=1, space="buy")
-    volume_ma_period = IntParameter(10, 30, default=16, space="buy")
-    volume_ratio_threshold = DecimalParameter(0.5, 2.5, default=0.9, decimals=1, space="buy")
+    ma_period = IntParameter(48, 144, default=96, space="buy")
+    rsi_period = IntParameter(10, 24, default=16, space="buy")
+    rsi_oversold = DecimalParameter(15, 35, default=25, decimals=1, space="buy")
+    rsi_overbought = DecimalParameter(65, 85, default=75, decimals=1, space="sell")
+    bb_period = IntParameter(10, 50, default=56, space="buy")
+    bb_std = DecimalParameter(2.0, 3.0, default=2.5, decimals=1, space="buy")
+    volume_ma_period = IntParameter(10, 30, default=28, space="buy")
+    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default=1.2, decimals=1, space="buy")
 
     startup_candle_count = 300
 
@@ -55,17 +55,17 @@ class GridLsV1Strategy(IStrategy):
 
     @property
     def protections(self):
-        return [       {'method': 'CooldownPeriod', 'stop_duration_candles': 8},
+        return [       {'method': 'CooldownPeriod', 'stop_duration_candles': 10},
         {       'method': 'StoplossGuard',
                 'lookback_period_candles': 96,
-                'trade_limit': 4,
-                'stop_duration_candles': 8,
+                'trade_limit': 3,
+                'stop_duration_candles': 10,
                 'only_per_pair': False},
         {       'method': 'MaxDrawdown',
                 'lookback_period_candles': 96,
                 'trade_limit': 20,
-                'stop_duration_candles': 8,
-                'max_allowed_drawdown': 0.18}]
+                'stop_duration_candles': 10,
+                'max_allowed_drawdown': 0.12}]
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe['ma'] = ta.EMA(dataframe['close'], timeperiod=self.ma_period.value)
@@ -90,10 +90,10 @@ class GridLsV1Strategy(IStrategy):
         rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
         rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
 
-        long_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= self.rsi_oversold.value)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
+        long_condition = (  (   (dataframe['adx'] <= 22) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= rsi_oversold) &   (dataframe['zscore'] <= -1.0)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -1.2) &   (dataframe['atr_pct'] <= 0.028)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
         dataframe.loc[long_condition, 'enter_long'] = 1
 
-        short_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &   (dataframe['zscore'] >= 0.55) &   (dataframe['rsi'] >= self.rsi_overbought.value)  ) |  (   (dataframe['ema_fast'] < dataframe['ema_slow']) &   (dataframe['zscore'] >= 0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
+        short_condition = (  (   (dataframe['adx'] <= 22) &   (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &   (dataframe['rsi'] >= rsi_overbought) &   (dataframe['zscore'] >= 1.0)  ) |  (   (dataframe['ema_fast'] < dataframe['ema_slow']) &   (dataframe['zscore'] >= 1.2) &   (dataframe['atr_pct'] <= 0.028)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
         dataframe.loc[short_condition, 'enter_short'] = 1
 
         return dataframe
@@ -105,10 +105,10 @@ class GridLsV1Strategy(IStrategy):
         rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
         rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
 
-        exit_long_condition = (  (dataframe['close'] >= dataframe['bb_middle']) |  ((dataframe['rsi'] >= 54) & (dataframe['zscore'] >= -0.1)) |  (dataframe['atr_pct'] >= 0.045) ) 
+        exit_long_condition = (  (dataframe['close'] >= dataframe['bb_middle']) |  ((dataframe['rsi'] >= 58) & (dataframe['zscore'] >= 0.2)) |  (dataframe['atr_pct'] >= 0.05) ) 
         dataframe.loc[exit_long_condition, 'exit_long'] = 1
 
-        exit_short_condition = (  (dataframe['close'] <= dataframe['bb_middle']) |  ((dataframe['rsi'] <= 46) & (dataframe['zscore'] <= 0.1)) |  (dataframe['atr_pct'] >= 0.045) ) 
+        exit_short_condition = (  (dataframe['close'] <= dataframe['bb_middle']) |  ((dataframe['rsi'] <= 42) & (dataframe['zscore'] <= -0.2)) |  (dataframe['atr_pct'] >= 0.05) ) 
         dataframe.loc[exit_short_condition, 'exit_short'] = 1
 
         return dataframe

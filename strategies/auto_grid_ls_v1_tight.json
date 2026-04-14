@@ -1,0 +1,32 @@
+{
+  "strategy_name": "GridLsV1TightStrategy",
+  "profile_name": "default",
+  "params": {
+    "max_open_trades": {
+      "max_open_trades": 4
+    },
+    "buy": {
+      "ma_period": 96,
+      "rsi_period": 16,
+      "rsi_oversold": 25
+    },
+    "sell": {
+      "rsi_overbought": 75
+    },
+    "roi": {
+      "0": 0.012,
+      "120": 0.005,
+      "360": 0.0
+    },
+    "stoploss": {
+      "stoploss": -0.06
+    },
+    "trailing": {
+      "trailing_stop": true,
+      "trailing_stop_positive": 0.006,
+      "trailing_stop_positive_offset": 0.012
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2026-04-10T08:05:21.460567+00:00"
+}

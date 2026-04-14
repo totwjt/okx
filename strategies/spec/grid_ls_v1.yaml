@@ -85,7 +85,6 @@ derived_indicators:
     formula: (dataframe['close'] - dataframe['bb_middle']) / (dataframe['bb_upper'] - dataframe['bb_lower']).replace(0, np.nan)
   - name: mean_revert_score
     formula: ((dataframe['bb_middle'] - dataframe['close']) / dataframe['close'].replace(0, np.nan)) * 100
-
 entry_conditions:
   long: |
     (
@@ -100,12 +99,13 @@ entry_conditions:
         (dataframe['atr_pct'] <= 0.032)
       )
     ) &
-    (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value)
+    (dataframe['volume_ratio'] >= volume_ratio_threshold)
   short: |
     (
       (
         (dataframe['adx'] <= 23) &
         (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &
+        (dataframe['zscore'] >= 0.55) &
         (dataframe['rsi'] >= rsi_overbought)
       ) |
       (
@@ -114,7 +114,7 @@ entry_conditions:
         (dataframe['atr_pct'] <= 0.032)
       )
     ) &
-    (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value)
+    (dataframe['volume_ratio'] >= volume_ratio_threshold)
 
 exit_conditions:
   long: |

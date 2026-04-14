@@ -1,5 +1,5 @@
 """
-网格均值回归策略 V1（RangeGrid + TrendPullback，支持标的波动变体） V1.0 - Auto-generated strategy
+激进 Scalping 策略 - 5m 框架，使用 Grid-LS 逻辑 V6.0 - Auto-generated strategy
 Trading Mode: futures
 """
 
@@ -15,32 +15,32 @@ from freqtrade.strategy import (
 )
 
 
-class GridLsV1Strategy(IStrategy):
+class ScalpingV1Strategy(IStrategy):
     INTERFACE_VERSION = 3
 
-    can_short = False
-    timeframe = "15m"
+    can_short = True
+    timeframe = "5m"
 
-    stoploss = -0.11
-    minimal_roi = {"0": 0.0322, "60": 0.0118, "240": 0.0}
+    stoploss = -0.003
+    minimal_roi = {"0": 0.005, "2": 0.008}
 
     trailing_stop = True
-    trailing_stop_positive = 0.012
-    trailing_stop_positive_offset = 0.02
+    trailing_stop_positive = 0.003
+    trailing_stop_positive_offset = 0.005
 
     process_only_new_candles = True
     use_exit_signal = True
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
 
-    ma_period = IntParameter(30, 120, default=54, space="buy")
-    rsi_period = IntParameter(7, 28, default=11, space="buy")
-    rsi_oversold = DecimalParameter(18, 40, default=34.0, decimals=1, space="buy")
-    rsi_overbought = DecimalParameter(60, 88, default=66.0, decimals=1, space="sell")
+    ma_period = IntParameter(30, 80, default=54, space="buy")
+    rsi_period = IntParameter(7, 21, default=7, space="buy")
+    rsi_oversold = DecimalParameter(20, 40, default=35, decimals=1, space="buy")
+    rsi_overbought = DecimalParameter(60, 80, default=65, decimals=1, space="sell")
     bb_period = IntParameter(10, 50, default=38, space="buy")
-    bb_std = DecimalParameter(1.6, 3.2, default=1.9, decimals=1, space="buy")
+    bb_std = DecimalParameter(1.5, 2.5, default=1.9, decimals=1, space="buy")
     volume_ma_period = IntParameter(10, 30, default=16, space="buy")
-    volume_ratio_threshold = DecimalParameter(0.5, 2.5, default=0.9, decimals=1, space="buy")
+    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default=0.9, decimals=1, space="buy")
 
     startup_candle_count = 300
 
@@ -78,9 +78,7 @@ class GridLsV1Strategy(IStrategy):
         dataframe['adx'] = ta.ADX(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=14)
         dataframe['atr'] = ta.ATR(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=14)
         dataframe['atr_pct'] = dataframe['atr'] / dataframe['close'].replace(0, np.nan)
-        dataframe['bb_width'] = (dataframe['bb_upper'] - dataframe['bb_lower']) / dataframe['bb_middle'].replace(0, np.nan)
         dataframe['zscore'] = (dataframe['close'] - dataframe['bb_middle']) / (dataframe['bb_upper'] - dataframe['bb_lower']).replace(0, np.nan)
-        dataframe['mean_revert_score'] = ((dataframe['bb_middle'] - dataframe['close']) / dataframe['close'].replace(0, np.nan)) * 100
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -90,10 +88,10 @@ class GridLsV1Strategy(IStrategy):
         rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
         rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
 
-        long_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= self.rsi_oversold.value)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
+        long_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= self.rsi_oversold.value)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= 0.9) 
         dataframe.loc[long_condition, 'enter_long'] = 1
 
-        short_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &   (dataframe['zscore'] >= 0.55) &   (dataframe['rsi'] >= self.rsi_overbought.value)  ) |  (   (dataframe['ema_fast'] < dataframe['ema_slow']) &   (dataframe['zscore'] >= 0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= self.volume_ratio_threshold.value) 
+        short_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] >= dataframe['bb_upper'] * 0.998) &   (dataframe['rsi'] >= self.rsi_overbought.value)  ) |  (   (dataframe['ema_fast'] < dataframe['ema_slow']) &   (dataframe['zscore'] >= 0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= 0.9) 
         dataframe.loc[short_condition, 'enter_short'] = 1
 
         return dataframe
@@ -105,10 +103,10 @@ class GridLsV1Strategy(IStrategy):
         rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
         rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
 
-        exit_long_condition = (  (dataframe['close'] >= dataframe['bb_middle']) |  ((dataframe['rsi'] >= 54) & (dataframe['zscore'] >= -0.1)) |  (dataframe['atr_pct'] >= 0.045) ) 
+        exit_long_condition = (dataframe['close'] >= dataframe['bb_middle']) | ((dataframe['rsi'] >= 54) & (dataframe['zscore'] >= -0.1)) | (dataframe['atr_pct'] >= 0.045) 
         dataframe.loc[exit_long_condition, 'exit_long'] = 1
 
-        exit_short_condition = (  (dataframe['close'] <= dataframe['bb_middle']) |  ((dataframe['rsi'] <= 46) & (dataframe['zscore'] <= 0.1)) |  (dataframe['atr_pct'] >= 0.045) ) 
+        exit_short_condition = (dataframe['close'] <= dataframe['bb_middle']) | ((dataframe['rsi'] <= 46) & (dataframe['zscore'] <= 0.1)) | (dataframe['atr_pct'] >= 0.045) 
         dataframe.loc[exit_short_condition, 'exit_short'] = 1
 
         return dataframe

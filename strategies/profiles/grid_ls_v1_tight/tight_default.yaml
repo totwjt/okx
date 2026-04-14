@@ -1,0 +1,25 @@
+profile_name: tight_default
+strategy_name: grid_ls_v1_tight
+status: candidate
+source: profile:default
+updated_at: '2026-04-10T08:04:18.005496+00:00'
+overrides:
+  factors:
+    ma:
+      period: 96
+    rsi:
+      period: 16
+    rsi_oversold:
+      value: 25
+    rsi_overbought:
+      value: 75
+  risk_model:
+    max_open_trades: 4
+  stoploss: -0.06
+  minimal_roi:
+    '0': 0.012
+    '120': 0.005
+    '360': 0.0
+  trailing_stop: true
+  trailing_stop_positive: 0.006
+  trailing_stop_positive_offset: 0.012

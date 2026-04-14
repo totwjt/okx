@@ -1,0 +1,31 @@
+{
+  "strategy_name": "ScalpingV1Strategy",
+  "profile_name": "default",
+  "params": {
+    "max_open_trades": {
+      "max_open_trades": 2
+    },
+    "buy": {
+      "ma_period": 54,
+      "rsi_period": 7,
+      "rsi_oversold": 35
+    },
+    "sell": {
+      "rsi_overbought": 65
+    },
+    "roi": {
+      "0": 0.005,
+      "2": 0.008
+    },
+    "stoploss": {
+      "stoploss": -0.003
+    },
+    "trailing": {
+      "trailing_stop": true,
+      "trailing_stop_positive": 0.003,
+      "trailing_stop_positive_offset": 0.005
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2026-04-10T09:10:08.758191+00:00"
+}

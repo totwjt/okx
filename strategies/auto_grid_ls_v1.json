@@ -1,9 +1,9 @@
 {
   "strategy_name": "GridLsV1Strategy",
-  "profile_name": "candidate_pf_20260409_w",
+  "profile_name": "candidate_longonly_20260414_a",
   "params": {
     "max_open_trades": {
-      "max_open_trades": 4
+      "max_open_trades": 3
     },
     "buy": {
       "ma_period": 54,
@@ -28,5 +28,5 @@
     }
   },
   "ft_stratparam_v": 1,
-  "export_time": "2026-04-10T03:04:06.948152+00:00"
+  "export_time": "2026-04-14T01:24:20.053585+00:00"
 }

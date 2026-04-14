@@ -15,6 +15,22 @@ PARAM_FACTOR_MAP = {
     "rsi_period": ("rsi", "period"),
     "rsi_oversold": ("rsi_oversold", "value"),
     "rsi_overbought": ("rsi_overbought", "value"),
+    "bb_period": ("bb", "period"),
+    "bb_std": ("bb", "std"),
+    "bb_width_trend_min": ("bb", "width_trend_min"),
+    "bb_width_range_max": ("bb", "width_range_max"),
+    "volume_ma_period": ("volume", "ma_period"),
+    "volume_ratio_threshold": ("volume", "ratio_threshold"),
+    "adx_period": ("adx", "period"),
+    "adx_trend_min": ("adx", "trend_min"),
+    "adx_range_max": ("adx", "range_max"),
+    "atr_period": ("atr", "period"),
+    "atr_entry_max": ("atr", "entry_max"),
+    "atr_exit_max": ("atr", "exit_max"),
+    "zscore_period": ("zscore", "period"),
+    "zscore_entry_abs": ("zscore", "entry_abs"),
+    "zscore_exit_abs": ("zscore", "exit_abs"),
+    "donchian_period": ("donchian", "period"),
 }
 
 
@@ -181,6 +197,39 @@ def build_profile_from_hyperopt(name: str, profile_name: str, hyperopt_filename:
             factor_overrides["volume"]["ma_period"] = hp_params["volume_ma_period"]
         if "volume_ratio_threshold" in hp_params:
             factor_overrides["volume"]["ratio_threshold"] = hp_params["volume_ratio_threshold"]
+    if "bb_width_trend_min" in hp_params or "bb_width_range_max" in hp_params:
+        factor_overrides.setdefault("bb", {})
+        if "bb_width_trend_min" in hp_params:
+            factor_overrides["bb"]["width_trend_min"] = hp_params["bb_width_trend_min"]
+        if "bb_width_range_max" in hp_params:
+            factor_overrides["bb"]["width_range_max"] = hp_params["bb_width_range_max"]
+    if "adx_period" in hp_params or "adx_trend_min" in hp_params or "adx_range_max" in hp_params:
+        factor_overrides.setdefault("adx", {})
+        if "adx_period" in hp_params:
+            factor_overrides["adx"]["period"] = hp_params["adx_period"]
+        if "adx_trend_min" in hp_params:
+            factor_overrides["adx"]["trend_min"] = hp_params["adx_trend_min"]
+        if "adx_range_max" in hp_params:
+            factor_overrides["adx"]["range_max"] = hp_params["adx_range_max"]
+    if "atr_period" in hp_params or "atr_entry_max" in hp_params or "atr_exit_max" in hp_params:
+        factor_overrides.setdefault("atr", {})
+        if "atr_period" in hp_params:
+            factor_overrides["atr"]["period"] = hp_params["atr_period"]
+        if "atr_entry_max" in hp_params:
+            factor_overrides["atr"]["entry_max"] = hp_params["atr_entry_max"]
+        if "atr_exit_max" in hp_params:
+            factor_overrides["atr"]["exit_max"] = hp_params["atr_exit_max"]
+    if "zscore_period" in hp_params or "zscore_entry_abs" in hp_params or "zscore_exit_abs" in hp_params:
+        factor_overrides.setdefault("zscore", {})
+        if "zscore_period" in hp_params:
+            factor_overrides["zscore"]["period"] = hp_params["zscore_period"]
+        if "zscore_entry_abs" in hp_params:
+            factor_overrides["zscore"]["entry_abs"] = hp_params["zscore_entry_abs"]
+        if "zscore_exit_abs" in hp_params:
+            factor_overrides["zscore"]["exit_abs"] = hp_params["zscore_exit_abs"]
+    if "donchian_period" in hp_params:
+        factor_overrides.setdefault("donchian", {})
+        factor_overrides["donchian"]["period"] = hp_params["donchian_period"]
 
     overrides = {"factors": factor_overrides}
     for key in [

@@ -40,6 +40,8 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
 
     params_code = []
     indicators_code = []
+    entry_aliases: list[tuple[str, object]] = []
+    exit_aliases: list[tuple[str, object]] = []
 
     factors = spec.get("factors", {})
 
@@ -63,12 +65,16 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
         params_code.append(
             f"    rsi_oversold = DecimalParameter({rsi_os['range'][0]}, {rsi_os['range'][1]}, default={rsi_os['value']}, decimals=1, space=\"{rsi_os.get('space', 'buy')}\")"
         )
+        entry_aliases.append(("rsi_oversold", rsi_os["value"]))
+        exit_aliases.append(("rsi_oversold", rsi_os["value"]))
 
     if factors.get("rsi_overbought", {}).get("enabled", False):
         rsi_ob = factors["rsi_overbought"]
         params_code.append(
             f"    rsi_overbought = DecimalParameter({rsi_ob['range'][0]}, {rsi_ob['range'][1]}, default={rsi_ob['value']}, decimals=1, space=\"{rsi_ob.get('space', 'sell')}\")"
         )
+        entry_aliases.append(("rsi_overbought", rsi_ob["value"]))
+        exit_aliases.append(("rsi_overbought", rsi_ob["value"]))
 
     if factors.get("bb", {}).get("enabled", False):
         bb = factors["bb"]
@@ -80,15 +86,32 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
         indicators_code.append(
             "        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe['close'], timeperiod=self.bb_period.value, nbdevup=self.bb_std.value, nbdevdn=self.bb_std.value)"
         )
+        if "width_trend_min" in bb:
+            width_trend_range = bb.get("width_trend_range", [0.015, 0.05])
+            params_code.append(
+                f"    bb_width_trend_min = DecimalParameter({width_trend_range[0]}, {width_trend_range[1]}, default={bb['width_trend_min']}, decimals=3, space=\"buy\")"
+            )
+            entry_aliases.append(("bb_width_trend_min", bb["width_trend_min"]))
+            exit_aliases.append(("bb_width_trend_min", bb["width_trend_min"]))
+        if "width_range_max" in bb:
+            width_range_max = bb.get("width_range_max_range", [0.01, 0.04])
+            params_code.append(
+                f"    bb_width_range_max = DecimalParameter({width_range_max[0]}, {width_range_max[1]}, default={bb['width_range_max']}, decimals=3, space=\"buy\")"
+            )
+            entry_aliases.append(("bb_width_range_max", bb["width_range_max"]))
+            exit_aliases.append(("bb_width_range_max", bb["width_range_max"]))
 
     if factors.get("volume", {}).get("enabled", False):
         vol = factors["volume"]
         params_code.append(f"    volume_ma_period = IntParameter(10, 30, default={vol['ma_period']}, space=\"buy\")")
+        ratio_range = vol.get("ratio_range", [0.5, 2.5])
         params_code.append(
-            f"    volume_ratio_threshold = DecimalParameter(1.0, 2.5, default={vol['ratio_threshold']}, decimals=1, space=\"buy\")"
+            f"    volume_ratio_threshold = DecimalParameter({ratio_range[0]}, {ratio_range[1]}, default={vol['ratio_threshold']}, decimals=2, space=\"buy\")"
         )
         indicators_code.append("        dataframe['volume_ma'] = dataframe['volume'].rolling(window=self.volume_ma_period.value).mean()")
         indicators_code.append("        dataframe['volume_ratio'] = dataframe['volume'] / dataframe['volume_ma']")
+        entry_aliases.append(("volume_ratio_threshold", vol["ratio_threshold"]))
+        exit_aliases.append(("volume_ratio_threshold", vol["ratio_threshold"]))
 
     if factors.get("macd", {}).get("enabled", False):
         macd = factors["macd"]
@@ -98,6 +121,83 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
         indicators_code.append(
             "        dataframe['macd'], dataframe['macd_signal'], dataframe['macd_hist'] = ta.MACD(dataframe['close'], fastperiod=self.macd_fast.value, slowperiod=self.macd_slow.value, signalperiod=self.macd_signal.value)"
         )
+
+    if factors.get("adx", {}).get("enabled", False):
+        adx = factors["adx"]
+        adx_period_range = adx.get("period_range", [7, 28])
+        trend_min_range = adx.get("trend_min_range", [18, 35])
+        range_max_range = adx.get("range_max_range", [8, 22])
+        params_code.append(
+            f"    adx_period = IntParameter({adx_period_range[0]}, {adx_period_range[1]}, default={adx.get('period', 14)}, space=\"buy\")"
+        )
+        params_code.append(
+            f"    adx_trend_min = DecimalParameter({trend_min_range[0]}, {trend_min_range[1]}, default={adx['trend_min']}, decimals=1, space=\"buy\")"
+        )
+        params_code.append(
+            f"    adx_range_max = DecimalParameter({range_max_range[0]}, {range_max_range[1]}, default={adx['range_max']}, decimals=1, space=\"buy\")"
+        )
+        indicators_code.append("        dataframe['adx'] = ta.ADX(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=self.adx_period.value)")
+        entry_aliases.append(("adx_trend_min", adx["trend_min"]))
+        entry_aliases.append(("adx_range_max", adx["range_max"]))
+        exit_aliases.append(("adx_trend_min", adx["trend_min"]))
+        exit_aliases.append(("adx_range_max", adx["range_max"]))
+
+    if factors.get("atr", {}).get("enabled", False):
+        atr = factors["atr"]
+        atr_period_range = atr.get("period_range", [7, 28])
+        atr_entry_range = atr.get("entry_max_range", [0.015, 0.06])
+        atr_exit_range = atr.get("exit_max_range", [0.02, 0.08])
+        params_code.append(
+            f"    atr_period = IntParameter({atr_period_range[0]}, {atr_period_range[1]}, default={atr.get('period', 14)}, space=\"buy\")"
+        )
+        params_code.append(
+            f"    atr_entry_max = DecimalParameter({atr_entry_range[0]}, {atr_entry_range[1]}, default={atr['entry_max']}, decimals=3, space=\"buy\")"
+        )
+        params_code.append(
+            f"    atr_exit_max = DecimalParameter({atr_exit_range[0]}, {atr_exit_range[1]}, default={atr['exit_max']}, decimals=3, space=\"sell\")"
+        )
+        indicators_code.append("        dataframe['atr'] = ta.ATR(dataframe['high'], dataframe['low'], dataframe['close'], timeperiod=self.atr_period.value)")
+        indicators_code.append("        dataframe['atr_pct'] = dataframe['atr'] / dataframe['close'].replace(0, np.nan)")
+        entry_aliases.append(("atr_entry_max", atr["entry_max"]))
+        exit_aliases.append(("atr_exit_max", atr["exit_max"]))
+
+    if factors.get("zscore", {}).get("enabled", False):
+        zscore = factors["zscore"]
+        zscore_period_range = zscore.get("period_range", [12, 72])
+        entry_abs_range = zscore.get("entry_abs_range", [0.6, 2.2])
+        exit_abs_range = zscore.get("exit_abs_range", [0.1, 1.2])
+        params_code.append(
+            f"    zscore_period = IntParameter({zscore_period_range[0]}, {zscore_period_range[1]}, default={zscore.get('period', 32)}, space=\"buy\")"
+        )
+        params_code.append(
+            f"    zscore_entry_abs = DecimalParameter({entry_abs_range[0]}, {entry_abs_range[1]}, default={zscore['entry_abs']}, decimals=2, space=\"buy\")"
+        )
+        params_code.append(
+            f"    zscore_exit_abs = DecimalParameter({exit_abs_range[0]}, {exit_abs_range[1]}, default={zscore['exit_abs']}, decimals=2, space=\"sell\")"
+        )
+        indicators_code.append("        dataframe['zscore_mean'] = dataframe['close'].rolling(self.zscore_period.value).mean()")
+        indicators_code.append("        dataframe['zscore_std'] = dataframe['close'].rolling(self.zscore_period.value).std()")
+        indicators_code.append("        dataframe['zscore'] = (dataframe['close'] - dataframe['zscore_mean']) / dataframe['zscore_std'].replace(0, np.nan)")
+        entry_aliases.append(("zscore_entry_abs", zscore["entry_abs"]))
+        exit_aliases.append(("zscore_exit_abs", zscore["exit_abs"]))
+
+    if factors.get("donchian", {}).get("enabled", False):
+        donchian = factors["donchian"]
+        donchian_period_range = donchian.get("period_range", [10, 55])
+        params_code.append(
+            f"    donchian_period = IntParameter({donchian_period_range[0]}, {donchian_period_range[1]}, default={donchian.get('period', 20)}, space=\"buy\")"
+        )
+        indicators_code.append("        dataframe['donchian_high'] = dataframe['high'].rolling(self.donchian_period.value).max()")
+        indicators_code.append("        dataframe['donchian_low'] = dataframe['low'].rolling(self.donchian_period.value).min()")
+
+    entry_alias_code = [
+        f"        {name} = self.{name}.value if hasattr(self, '{name}') else {repr(default)}"
+        for name, default in entry_aliases
+    ]
+    exit_alias_code = [
+        f"        {name} = self.{name}.value if hasattr(self, '{name}') else {repr(default)}"
+        for name, default in exit_aliases
+    ]
 
     for ind in spec.get("derived_indicators", []):
         indicators_code.append(f"        dataframe['{ind['name']}'] = {ind.get('formula', '')}")
@@ -171,8 +271,7 @@ class {class_name}(IStrategy):
         dataframe['enter_long'] = 0
         dataframe['enter_short'] = 0
 
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
+{chr(10).join(entry_alias_code)}
 
         long_condition = {long_entry}
         dataframe.loc[long_condition, 'enter_long'] = 1
@@ -186,8 +285,7 @@ class {class_name}(IStrategy):
         dataframe['exit_long'] = 0
         dataframe['exit_short'] = 0
 
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 30
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 70
+{chr(10).join(exit_alias_code)}
 
         exit_long_condition = {long_exit}
         dataframe.loc[exit_long_condition, 'exit_long'] = 1

@@ -1,0 +1,43 @@
+profile_name: candidate_multifactor_20260414_b_trend
+strategy_name: multi_ls_v3
+status: candidate
+source: profile:candidate_multifactor_20260414_a
+updated_at: '2026-04-14T09:42:00+00:00'
+overrides:
+  factors:
+    rsi:
+      period: 12
+    rsi_oversold:
+      value: 31
+    rsi_overbought:
+      value: 69
+    bb:
+      period: 20
+      std: 2.0
+      width_trend_min: 0.024
+      width_range_max: 0.020
+    volume:
+      ma_period: 16
+      ratio_threshold: 0.88
+    adx:
+      period: 14
+      trend_min: 21
+      range_max: 15
+    atr:
+      period: 14
+      entry_max: 0.038
+      exit_max: 0.045
+    zscore:
+      period: 28
+      entry_abs: 1.25
+      exit_abs: 0.42
+    donchian:
+      period: 18
+  stoploss: -0.11
+  minimal_roi:
+    '0': 0.11
+    '90': 0.04
+    '240': 0.0
+  trailing_stop: false
+  risk_model:
+    max_open_trades: 3

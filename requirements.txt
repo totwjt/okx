@@ -12,3 +12,5 @@ qtpylib
 requests
 PyYAML
 psycopg2-binary
+fastapi
+uvicorn

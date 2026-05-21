@@ -21,6 +21,6 @@ PostgreSQL strategy registry
 
 - [PRODUCT_PLAN.md](./PRODUCT_PLAN.md): 功能模块、优先级、MVP 范围
 - [UI_TECH_STACK.md](./UI_TECH_STACK.md): UI 设计、技术栈、目录建议
+- [WEB_BOUNDARY.md](./WEB_BOUNDARY.md): Web 项目落地边界、技术栈决策、环境检查入口
 - [../tasks/AI_CODING_WORKFLOW.md](../tasks/AI_CODING_WORKFLOW.md): AI coding workflow 任务状态机
 - [../tasks/TASKS.md](../tasks/TASKS.md): TASK 编号任务清单
-

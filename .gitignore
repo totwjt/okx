@@ -31,6 +31,9 @@ venv/
 .vscode/
 *.swp
 *.swo
+*.tsbuildinfo
+node_modules/
+output/
 data/
 ft_userdata/
 freqtrade_env/

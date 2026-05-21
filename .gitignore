@@ -35,6 +35,15 @@ data/
 ft_userdata/
 freqtrade_env/
 
+# Strategy runtime/generated artifacts
+strategies/generated/*
+!strategies/generated/.gitkeep
+strategies/results/
+strategies/auto_*.py
+strategies/auto_*.json
+execution/freqtrade/user_data/runtime_strategies/
+execution/freqtrade/user_data/runtime_params/
+
 # Freqtrade runtime data
 execution/freqtrade/user_data/*
 !execution/freqtrade/user_data/config.example.json

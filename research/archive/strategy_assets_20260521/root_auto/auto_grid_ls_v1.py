@@ -22,11 +22,11 @@ class GridLsV1Strategy(IStrategy):
     timeframe = "15m"
 
     stoploss = -0.11
-    minimal_roi = {"0": 0.0322, "60": 0.0118, "240": 0.0}
+    minimal_roi = {"0": 0.03, "60": 0.01, "240": 0.0}
 
     trailing_stop = True
-    trailing_stop_positive = 0.012
-    trailing_stop_positive_offset = 0.02
+    trailing_stop_positive = 0.013
+    trailing_stop_positive_offset = 0.021
 
     process_only_new_candles = True
     use_exit_signal = True
@@ -35,8 +35,8 @@ class GridLsV1Strategy(IStrategy):
 
     ma_period = IntParameter(30, 120, default=54, space="buy")
     rsi_period = IntParameter(7, 28, default=11, space="buy")
-    rsi_oversold = DecimalParameter(18, 40, default=34.0, decimals=1, space="buy")
-    rsi_overbought = DecimalParameter(60, 88, default=66.0, decimals=1, space="sell")
+    rsi_oversold = DecimalParameter(18, 40, default=33.0, decimals=1, space="buy")
+    rsi_overbought = DecimalParameter(60, 88, default=67.0, decimals=1, space="sell")
     bb_period = IntParameter(10, 50, default=38, space="buy")
     bb_std = DecimalParameter(1.6, 3.2, default=1.9, decimals=1, space="buy")
     volume_ma_period = IntParameter(10, 30, default=16, space="buy")
@@ -87,8 +87,8 @@ class GridLsV1Strategy(IStrategy):
         dataframe['enter_long'] = 0
         dataframe['enter_short'] = 0
 
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 34.0
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 66.0
+        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 33.0
+        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 67.0
         volume_ratio_threshold = self.volume_ratio_threshold.value if hasattr(self, 'volume_ratio_threshold') else 0.9
 
         long_condition = (  (   (dataframe['adx'] <= 23) &   (dataframe['close'] <= dataframe['bb_lower'] * 1.002) &   (dataframe['rsi'] <= rsi_oversold)  ) |  (   (dataframe['ema_fast'] > dataframe['ema_slow']) &   (dataframe['zscore'] <= -0.9) &   (dataframe['atr_pct'] <= 0.032)  ) ) & (dataframe['volume_ratio'] >= volume_ratio_threshold) 
@@ -103,8 +103,8 @@ class GridLsV1Strategy(IStrategy):
         dataframe['exit_long'] = 0
         dataframe['exit_short'] = 0
 
-        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 34.0
-        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 66.0
+        rsi_oversold = self.rsi_oversold.value if hasattr(self, 'rsi_oversold') else 33.0
+        rsi_overbought = self.rsi_overbought.value if hasattr(self, 'rsi_overbought') else 67.0
         volume_ratio_threshold = self.volume_ratio_threshold.value if hasattr(self, 'volume_ratio_threshold') else 0.9
 
         exit_long_condition = (  (dataframe['close'] >= dataframe['bb_middle']) |  ((dataframe['rsi'] >= 54) & (dataframe['zscore'] >= -0.1)) |  (dataframe['atr_pct'] >= 0.045) ) 

@@ -1,9 +1,31 @@
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 
-STRATEGY_DIR = Path("/freqtrade/user_data/strategies")
+STRATEGY_DIR = Path(os.getenv("STRATEGY_SOURCE_DIR", Path(__file__).resolve().parents[1]))
+
+
+def project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def resolve_project_path(value: str | None, default: str) -> Path:
+    path = Path(value or default)
+    if path.is_absolute():
+        return path
+    return project_root() / path
+
+
+RUNTIME_STRATEGY_DIR = resolve_project_path(
+    os.getenv("STRATEGY_RUNTIME_DIR"),
+    "execution/freqtrade/user_data/runtime_strategies",
+)
+RUNTIME_PARAM_DIR = resolve_project_path(
+    os.getenv("STRATEGY_PARAM_RUNTIME_DIR"),
+    "execution/freqtrade/user_data/runtime_params",
+)
 
 
 def strategy_class_name(name: str) -> str:

@@ -10,3 +10,5 @@ talib
 technical
 qtpylib
 requests
+PyYAML
+psycopg2-binary

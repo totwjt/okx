@@ -1,6 +1,6 @@
 {
   "strategy_name": "GridLsV1Strategy",
-  "profile_name": "candidate_pf_20260409_w",
+  "profile_name": "candidate_opt_20260415_v2",
   "params": {
     "max_open_trades": {
       "max_open_trades": 4
@@ -8,14 +8,14 @@
     "buy": {
       "ma_period": 54,
       "rsi_period": 11,
-      "rsi_oversold": 34.0
+      "rsi_oversold": 33.0
     },
     "sell": {
-      "rsi_overbought": 66.0
+      "rsi_overbought": 67.0
     },
     "roi": {
-      "0": 0.0322,
-      "60": 0.0118,
+      "0": 0.03,
+      "60": 0.01,
       "240": 0.0
     },
     "stoploss": {
@@ -23,10 +23,10 @@
     },
     "trailing": {
       "trailing_stop": true,
-      "trailing_stop_positive": 0.012,
-      "trailing_stop_positive_offset": 0.02
+      "trailing_stop_positive": 0.013,
+      "trailing_stop_positive_offset": 0.021
     }
   },
   "ft_stratparam_v": 1,
-  "export_time": "2026-04-15T06:46:22.752360+00:00"
+  "export_time": "2026-04-15T07:28:46.672463+00:00"
 }

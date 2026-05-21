@@ -1,4 +1,5 @@
 import json
+import os
 import pprint
 from pathlib import Path
 
@@ -6,7 +7,7 @@ from services.runtime_service import STRATEGY_DIR, strategy_class_name
 from services.spec_service import build_protections
 
 
-GENERATED_DIR = Path("/freqtrade/user_data/strategies/generated")
+GENERATED_DIR = Path(os.getenv("STRATEGY_GENERATED_DIR", STRATEGY_DIR / "generated"))
 
 
 def ensure_generated_strategy(name: str, spec: dict) -> Path:

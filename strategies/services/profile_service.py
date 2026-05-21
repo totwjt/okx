@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -8,7 +9,8 @@ from pathlib import Path
 import yaml
 
 
-PROFILE_ROOT_DIR = Path("/freqtrade/user_data/strategies/profiles")
+STRATEGY_DIR = Path(os.getenv("STRATEGY_SOURCE_DIR", Path(__file__).resolve().parents[1]))
+PROFILE_ROOT_DIR = STRATEGY_DIR / "profiles"
 PROFILE_DEFAULT_NAME = "default"
 PARAM_FACTOR_MAP = {
     "ma_period": ("ma", "period"),

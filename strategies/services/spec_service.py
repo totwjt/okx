@@ -1,4 +1,5 @@
 import copy
+import os
 import sys
 from pathlib import Path
 
@@ -7,7 +8,8 @@ import yaml
 from services.profile_service import load_profile
 
 
-SPEC_DIR = Path("/freqtrade/user_data/strategies/spec")
+STRATEGY_DIR = Path(os.getenv("STRATEGY_SOURCE_DIR", Path(__file__).resolve().parents[1]))
+SPEC_DIR = STRATEGY_DIR / "spec"
 
 
 def load_spec(name: str) -> dict:

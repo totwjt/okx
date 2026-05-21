@@ -1,21 +1,37 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import pprint
 import shutil
 import sys
 from pathlib import Path
+import yaml
 from services.config_service import print_config, print_config_usage, set_default_config_value
+from services.db_service import (
+    ensure_database,
+    init_schema,
+    list_registry,
+    load_strategy_bundle,
+    promote_profile as db_promote_profile,
+    record_runtime_artifact,
+    upsert_profile,
+    upsert_spec,
+)
 from services.execution_service import run_backtest, run_backtest_phase, run_hyperopt, runtime_param_snapshot_path
-from services.generation_service import GENERATED_DIR, ensure_generated_strategy
+from services.generation_service import GENERATED_DIR, ensure_generated_strategy, generate_strategy
 from services.profile_service import (
+    active_profile_path,
     ensure_default_profile,
     get_active_profile_name,
     load_profile,
+    list_profile_names,
+    profile_path,
 )
 from services.profile_workflow_service import activate_profile, create_profile, import_hyperopt_profile, list_profiles, promote_profile, validate_profile
-from services.runtime_service import STRATEGY_DIR, strategy_class_name, sync_runtime_profile
+from services.runtime_service import RUNTIME_PARAM_DIR, RUNTIME_STRATEGY_DIR, STRATEGY_DIR, build_freqtrade_params, strategy_class_name, sync_runtime_profile
 from services.spec_service import (
     SPEC_DIR,
+    apply_profile_overrides,
     build_protections,
     get_config_path,
     get_cost_model,
@@ -27,6 +43,116 @@ from services.spec_service import (
 
 PROFILE_BT_RESULT_DIR = Path("/freqtrade/user_data/backtest_results/profile_validation")
 CONFIG_DIR = Path("/freqtrade/user_data/config.json")
+
+
+def cmd_registry(args):
+    if args.registry_command == "init-db":
+        db_name = ensure_database()
+        init_schema()
+        print(f"数据库已就绪: {db_name}")
+        print("策略注册表 schema 已初始化")
+        return
+
+    if args.registry_command == "import-files":
+        init_schema()
+        imported_specs = 0
+        imported_profiles = 0
+        source_dir = Path(args.source_dir) if args.source_dir else STRATEGY_DIR
+        source_spec_dir = source_dir / "spec"
+        source_profile_dir = source_dir / "profiles"
+        for spec_file in sorted(source_spec_dir.glob("*.yaml")):
+            name = spec_file.stem
+            with open(spec_file, "r", encoding="utf-8") as f:
+                spec = yaml.safe_load(f) or {}
+            upsert_spec(name, spec)
+            imported_specs += 1
+
+            active_name = "default"
+            active_path = source_profile_dir / name / "_active.yaml"
+            if active_path.exists():
+                with open(active_path, "r", encoding="utf-8") as f:
+                    active_name = (yaml.safe_load(f) or {}).get("active_profile", active_name)
+            profile_files = sorted((source_profile_dir / name).glob("*.yaml"))
+            for profile_file in profile_files:
+                if profile_file.name.startswith("_"):
+                    continue
+                profile_name = profile_file.stem
+                with open(profile_file, "r", encoding="utf-8") as f:
+                    profile = yaml.safe_load(f) or {}
+                profile.setdefault("profile_name", profile_name)
+                profile.setdefault("strategy_name", name)
+                profile.setdefault("status", "draft")
+                profile.setdefault("overrides", {})
+                upsert_profile(name, profile, is_active=profile_name == active_name)
+                imported_profiles += 1
+        if imported_specs == 0:
+            print(f"未发现可导入策略定义: {source_spec_dir}")
+            return
+        print(f"已导入策略定义: {imported_specs}")
+        print(f"已导入 profile: {imported_profiles}")
+        return
+
+    if args.registry_command == "list":
+        rows = list_registry()
+        print("\n=== Strategy Registry ===")
+        for row in rows:
+            active = row.get("active_profile") or "-"
+            print(
+                f"  - {row['slug']}: status={row['status']} "
+                f"profiles={row['profile_count']} active={active}"
+            )
+        print()
+        return
+
+    if args.registry_command == "show":
+        spec, profile = load_strategy_bundle(args.name, args.profile)
+        print("=== Spec ===")
+        pprint.pprint(spec, sort_dicts=False)
+        print("\n=== Profile ===")
+        pprint.pprint(profile, sort_dicts=False)
+        return
+
+    if args.registry_command == "materialize":
+        spec, profile = load_strategy_bundle(args.name, args.profile)
+        effective_spec = apply_profile_overrides(spec, profile)
+        code = generate_strategy(args.name, effective_spec)
+        RUNTIME_STRATEGY_DIR.mkdir(parents=True, exist_ok=True)
+        RUNTIME_PARAM_DIR.mkdir(parents=True, exist_ok=True)
+
+        strategy_path = RUNTIME_STRATEGY_DIR / f"auto_{args.name}.py"
+        params_path = RUNTIME_STRATEGY_DIR / f"auto_{args.name}.json"
+        params = build_freqtrade_params(args.name, effective_spec, profile.get("profile_name"))
+        params_text = json.dumps(params, ensure_ascii=False, indent=2)
+
+        strategy_path.write_text(code, encoding="utf-8")
+        params_path.write_text(params_text, encoding="utf-8")
+        record_runtime_artifact(
+            strategy_slug=args.name,
+            profile_name=profile["profile_name"],
+            artifact_type="freqtrade_strategy_py",
+            artifact_path=strategy_path,
+            content=code,
+            metadata={"class_name": strategy_class_name(args.name)},
+        )
+        record_runtime_artifact(
+            strategy_slug=args.name,
+            profile_name=profile["profile_name"],
+            artifact_type="freqtrade_params_json",
+            artifact_path=params_path,
+            content=params_text,
+            metadata={"strategy_name": strategy_class_name(args.name)},
+        )
+        print(f"已 materialize 策略文件: {strategy_path}")
+        print(f"已 materialize 参数文件: {params_path}")
+        print(f"使用 profile: {profile['profile_name']}")
+        return
+
+    if args.registry_command == "promote":
+        db_promote_profile(args.name, args.profile_name, args.to_status, args.reason)
+        print(f"已写入晋级事件: {args.name}/{args.profile_name} -> {args.to_status}")
+        return
+
+    print("支持的 registry 子命令: init-db/import-files/list/show/materialize/promote")
 
 
 def cmd_list(args):
@@ -418,6 +544,28 @@ def main():
     profile_validate.add_argument("--min-avg-profit", type=float, default=0.0, help="最低单笔平均收益比例")
     profile_validate.add_argument("--min-trades-per-day", type=float, default=0.0, help="最低日均成交笔数")
     profile_validate.add_argument("--promote-on-pass", action="store_true", help="验证通过后自动晋级为 validated")
+
+    registry_parser = subparsers.add_parser("registry", help="PostgreSQL 策略注册表")
+    registry_subparsers = registry_parser.add_subparsers(dest="registry_command", help="registry 子命令")
+
+    registry_subparsers.add_parser("init-db", help="创建数据库并初始化策略注册表 schema")
+    registry_import = registry_subparsers.add_parser("import-files", help="从旧 spec/profile YAML 导入 PostgreSQL")
+    registry_import.add_argument("--source-dir", help="包含 spec/ 和 profiles/ 的目录，默认 strategies/")
+    registry_subparsers.add_parser("list", help="列出数据库中的策略注册表")
+
+    registry_show = registry_subparsers.add_parser("show", help="查看数据库中的 spec/profile bundle")
+    registry_show.add_argument("name", help="策略 slug")
+    registry_show.add_argument("--profile", help="profile 名称，默认 active/优先级最高 profile")
+
+    registry_materialize = registry_subparsers.add_parser("materialize", help="从数据库生成临时 Freqtrade 运行产物")
+    registry_materialize.add_argument("name", help="策略 slug")
+    registry_materialize.add_argument("--profile", help="profile 名称，默认 active/优先级最高 profile")
+
+    registry_promote = registry_subparsers.add_parser("promote", help="在数据库中晋级 profile 并写入事件")
+    registry_promote.add_argument("name", help="策略 slug")
+    registry_promote.add_argument("profile_name", help="profile 名称")
+    registry_promote.add_argument("to_status", choices=["candidate", "validated", "paper_active", "live_candidate", "live_active", "archived"], help="目标状态")
+    registry_promote.add_argument("--reason", help="晋级原因")
     
     args = parser.parse_args()
     
@@ -437,6 +585,8 @@ def main():
         cmd_config(args)
     elif args.command == "profile":
         cmd_profile(args)
+    elif args.command == "registry":
+        cmd_registry(args)
     else:
         parser.print_help()
 

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import RuntimeView from '../views/RuntimeView.vue';
 import PlaceholderView from '../views/PlaceholderView.vue';
+import StrategiesView from '../views/StrategiesView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -9,7 +10,7 @@ export const router = createRouter({
     {
       path: '/strategies',
       name: 'strategies',
-      component: PlaceholderView,
+      component: StrategiesView,
       meta: { title: '策略管理', section: 'Registry' },
     },
     {
@@ -50,4 +51,3 @@ export const router = createRouter({
     },
   ],
 });
-

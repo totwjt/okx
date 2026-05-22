@@ -10,7 +10,7 @@ TASK-001 已落地的内容：
 TASK-002 API 入口：
 
 ```bash
-python web/backend/run_api.py
+web/start_web.sh
 ```
 
 接口：

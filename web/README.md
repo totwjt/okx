@@ -19,3 +19,10 @@ python3 web/backend/system_check.py
 python3 web/backend/system_check.py --strict
 ```
 
+一键启动：
+
+```bash
+web/start_web.sh
+```
+
+脚本会先释放固定端口 `8123`，再构建前端并启动 Web 服务。

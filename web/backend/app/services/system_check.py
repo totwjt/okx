@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -127,9 +128,19 @@ def _check_freqtrade() -> dict[str, Any]:
     result["compose_available"] = compose.returncode == 0
     if compose.stdout:
         result["compose_status_raw"] = compose.stdout.strip()
+        try:
+            compose_status = json.loads(compose.stdout)
+            result["compose_state"] = compose_status.get("State")
+            result["compose_status"] = compose_status.get("Status")
+        except json.JSONDecodeError:
+            result["compose_parse_error"] = "failed to parse docker compose ps json"
     if compose.stderr:
         result["compose_error"] = compose.stderr.strip()
-    result["ok"] = bool(result["config_exists"] and result["compose_available"])
+    result["ok"] = bool(
+        result["config_exists"]
+        and result["compose_available"]
+        and result.get("compose_state") == "running"
+    )
     return result
 
 

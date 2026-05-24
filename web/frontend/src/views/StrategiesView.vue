@@ -46,6 +46,21 @@ function statusClass(status: string): string {
   return 'badge-warn';
 }
 
+function statusText(status: string): string {
+  const labels: Record<string, string> = {
+    draft: '草稿',
+    generated: '已生成',
+    backtested: '已回测',
+    validated: '已验证',
+    paper_active: '模拟盘生效',
+    live_candidate: '实盘候选',
+    live_active: '实盘生效',
+    archived: '已归档',
+    candidate: '候选',
+  };
+  return labels[status.toLowerCase()] ?? status;
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
@@ -57,6 +72,18 @@ function formatDate(value: string): string {
 
 function countKeys(value: Record<string, unknown>): number {
   return Object.keys(value ?? {}).length;
+}
+
+function valueTypeText(value: unknown): string {
+  const rawType = typeof value;
+  const labels: Record<string, string> = {
+    object: '对象',
+    string: '文本',
+    number: '数字',
+    boolean: '布尔',
+    undefined: '未定义',
+  };
+  return labels[rawType] ?? rawType;
 }
 
 async function selectStrategy(slug: string) {
@@ -71,7 +98,7 @@ async function selectStrategy(slug: string) {
     selectedStrategy.value = detail;
     profiles.value = profileRows;
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'strategy load failed';
+    error.value = err instanceof Error ? err.message : '策略详情加载失败';
   } finally {
     detailLoading.value = false;
   }
@@ -86,7 +113,7 @@ async function loadStrategies() {
       await selectStrategy(strategies.value[0].slug);
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'strategy list failed';
+    error.value = err instanceof Error ? err.message : '策略列表加载失败';
   } finally {
     loading.value = false;
   }
@@ -120,7 +147,7 @@ onMounted(loadStrategies);
             <small>{{ strategy.slug }}</small>
           </span>
           <span class="strategy-row-meta">
-            <span :class="['badge', statusClass(strategy.status)]">{{ strategy.status }}</span>
+            <span :class="['badge', statusClass(strategy.status)]">{{ statusText(strategy.status) }}</span>
             <span class="numeric">{{ strategy.profile_count }}</span>
           </span>
         </button>
@@ -132,30 +159,30 @@ onMounted(loadStrategies);
         <div class="panel-header">
           <span>{{ selectedSummary?.name ?? '策略详情' }}</span>
           <span v-if="selectedSummary" :class="['badge', statusClass(selectedSummary.status)]">
-            {{ selectedSummary.status }}
+            {{ statusText(selectedSummary.status) }}
           </span>
         </div>
 
-        <div v-if="detailLoading" class="placeholder-body">loading</div>
+        <div v-if="detailLoading" class="placeholder-body">加载中</div>
         <div v-else-if="selectedStrategy" class="detail-grid">
           <div class="detail-cell">
-            <span>slug</span>
+            <span>策略标识</span>
             <strong>{{ selectedStrategy.slug }}</strong>
           </div>
           <div class="detail-cell">
-            <span>active profile</span>
+            <span>当前参数档案</span>
             <strong>{{ selectedStrategy.active_profile ?? '-' }}</strong>
           </div>
           <div class="detail-cell">
-            <span>profiles</span>
+            <span>参数档案数</span>
             <strong>{{ selectedStrategy.profile_count }}</strong>
           </div>
           <div class="detail-cell">
-            <span>updated</span>
+            <span>更新时间</span>
             <strong>{{ formatDate(selectedStrategy.updated_at) }}</strong>
           </div>
           <div class="detail-cell detail-cell-wide">
-            <span>description</span>
+            <span>说明</span>
             <strong>{{ selectedStrategy.description ?? '-' }}</strong>
           </div>
         </div>
@@ -163,29 +190,29 @@ onMounted(loadStrategies);
 
       <div class="panel">
         <div class="panel-header">
-          <span>Profile 状态</span>
-          <span class="badge badge-muted">{{ activeProfiles.length }} active</span>
+          <span>参数档案状态</span>
+          <span class="badge badge-muted">{{ activeProfiles.length }} 个生效</span>
         </div>
         <div class="table-wrap">
           <table class="dense-table">
             <thead>
               <tr>
-                <th>profile</th>
-                <th>status</th>
-                <th>active</th>
-                <th>source</th>
-                <th>overrides</th>
-                <th>validation</th>
-                <th>updated</th>
+                <th>参数档案</th>
+                <th>状态</th>
+                <th>生效</th>
+                <th>来源</th>
+                <th>覆盖参数</th>
+                <th>验证信息</th>
+                <th>更新时间</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="profile in profiles" :key="profile.profile_name">
                 <td class="name-cell">{{ profile.profile_name }}</td>
                 <td>
-                  <span :class="['badge', statusClass(profile.status)]">{{ profile.status }}</span>
+                  <span :class="['badge', statusClass(profile.status)]">{{ statusText(profile.status) }}</span>
                 </td>
-                <td>{{ profile.is_active ? 'yes' : '-' }}</td>
+                <td>{{ profile.is_active ? '是' : '-' }}</td>
                 <td>{{ profile.source ?? '-' }}</td>
                 <td class="numeric">{{ countKeys(profile.overrides) }}</td>
                 <td class="numeric">{{ countKeys(profile.validation) }}</td>
@@ -198,17 +225,16 @@ onMounted(loadStrategies);
 
       <div class="panel">
         <div class="panel-header">
-          <span>Spec 摘要</span>
-          <span class="badge badge-muted">no generated code</span>
+          <span>策略定义摘要</span>
+          <span class="badge badge-muted">不展示生成代码</span>
         </div>
         <div class="spec-summary">
           <div v-for="key in visibleSpecKeys" :key="key" class="spec-chip">
             <span>{{ key }}</span>
-            <strong>{{ typeof selectedStrategy?.spec[key] }}</strong>
+            <strong>{{ valueTypeText(selectedStrategy?.spec[key]) }}</strong>
           </div>
         </div>
       </div>
     </div>
   </section>
 </template>
-

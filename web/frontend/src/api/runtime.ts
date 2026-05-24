@@ -38,16 +38,23 @@ export async function materializeRuntime(
   strategySlug: string,
   profileName?: string | null,
 ): Promise<MaterializeResult> {
-  const response = await fetch('/api/runtime/materialize', {
+  const response = await fetch('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      strategy_slug: strategySlug,
-      profile_name: profileName || null,
+      job_type: 'materialize',
+      payload: {
+        strategy_slug: strategySlug,
+        profile_name: profileName || null,
+      },
     }),
   });
   if (!response.ok) {
     throw new Error(`materialize failed: ${response.status}`);
   }
-  return response.json() as Promise<MaterializeResult>;
+  const job = await response.json();
+  if (job.status === 'failed' || !job.result) {
+    throw new Error(job.error_summary ?? 'materialize failed');
+  }
+  return job.result as MaterializeResult;
 }

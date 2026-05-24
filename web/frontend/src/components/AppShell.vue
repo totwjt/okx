@@ -9,6 +9,7 @@ import {
   DatabaseOutlined,
   ExperimentOutlined,
   FundOutlined,
+  ScheduleOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue';
 
@@ -18,6 +19,7 @@ const navItems = [
   { path: '/strategies', label: '策略', icon: DatabaseOutlined },
   { path: '/backtests', label: '回测', icon: BarChartOutlined },
   { path: '/runtime', label: '运行', icon: ApiOutlined },
+  { path: '/jobs', label: '任务', icon: ScheduleOutlined },
   { path: '/paper', label: '模拟', icon: FundOutlined },
   { path: '/risk', label: '风控', icon: AlertOutlined },
   { path: '/factors', label: '因子', icon: ExperimentOutlined },
@@ -25,7 +27,7 @@ const navItems = [
 ];
 
 const title = computed(() => String(route.meta.title ?? 'AI-OuYi'));
-const section = computed(() => String(route.meta.section ?? 'System'));
+const section = computed(() => String(route.meta.section ?? '系统'));
 </script>
 
 <template>
@@ -35,7 +37,7 @@ const section = computed(() => String(route.meta.section ?? 'System'));
         <ControlOutlined class="brand-icon" />
         <div>
           <div class="brand-name">AI-OuYi</div>
-          <div class="brand-sub">Web Console</div>
+          <div class="brand-sub">管理控制台</div>
         </div>
       </div>
 
@@ -61,7 +63,7 @@ const section = computed(() => String(route.meta.section ?? 'System'));
         </div>
         <div class="topbar-actions">
           <span class="status-dot"></span>
-          <span>Dark</span>
+          <span>深色模式</span>
         </div>
       </header>
 
@@ -71,4 +73,3 @@ const section = computed(() => String(route.meta.section ?? 'System'));
     </div>
   </div>
 </template>
-

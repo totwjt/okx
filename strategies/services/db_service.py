@@ -309,16 +309,19 @@ def promote_profile(strategy_slug: str, profile_name: str, to_status: str, reaso
             if not row:
                 raise RuntimeError(f"profile not found in registry: {strategy_slug}/{profile_name}")
             from_status = row["status"]
-            is_active = to_status in {"paper_active", "live_active"}
-            if is_active:
+            activates_profile = to_status in {"paper_active", "live_active"}
+            if activates_profile:
                 cur.execute("update strategy_profiles set is_active = false where strategy_slug = %s", (strategy_slug,))
+                active_sql = ", is_active = true"
+            else:
+                active_sql = ""
             cur.execute(
-                """
+                f"""
                 update strategy_profiles
-                set status = %s, is_active = %s, updated_at = now()
+                set status = %s{active_sql}, updated_at = now()
                 where strategy_slug = %s and profile_name = %s
                 """,
-                (to_status, is_active, strategy_slug, profile_name),
+                (to_status, strategy_slug, profile_name),
             )
             cur.execute(
                 """

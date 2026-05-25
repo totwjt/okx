@@ -37,7 +37,7 @@ export async function fetchRuntimeArtifacts(limit = 50): Promise<RuntimeArtifact
 export async function materializeRuntime(
   strategySlug: string,
   profileName?: string | null,
-): Promise<MaterializeResult> {
+): Promise<WebJob> {
   const response = await fetch('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -52,9 +52,6 @@ export async function materializeRuntime(
   if (!response.ok) {
     throw new Error(`materialize failed: ${response.status}`);
   }
-  const job = await response.json();
-  if (job.status === 'failed' || !job.result) {
-    throw new Error(job.error_summary ?? 'materialize failed');
-  }
-  return job.result as MaterializeResult;
+  return response.json() as Promise<WebJob>;
 }
+import type { WebJob } from './jobs';

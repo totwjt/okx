@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import {
   AlertOutlined,
@@ -9,6 +9,7 @@ import {
   DatabaseOutlined,
   ExperimentOutlined,
   FundOutlined,
+  PartitionOutlined,
   ScheduleOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue';
@@ -17,6 +18,7 @@ const route = useRoute();
 
 const navItems = [
   { path: '/strategies', label: '策略', icon: DatabaseOutlined },
+  { path: '/lifecycle', label: '生命周期', icon: PartitionOutlined },
   { path: '/backtests', label: '回测', icon: BarChartOutlined },
   { path: '/runtime', label: '运行', icon: ApiOutlined },
   { path: '/jobs', label: '任务', icon: ScheduleOutlined },
@@ -28,6 +30,23 @@ const navItems = [
 
 const title = computed(() => String(route.meta.title ?? 'AI-OuYi'));
 const section = computed(() => String(route.meta.section ?? '系统'));
+const theme = ref<'dark' | 'light'>('dark');
+const themeLabel = computed(() => (theme.value === 'dark' ? '深色模式' : '浅色模式'));
+
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark';
+}
+
+watch(theme, (value) => {
+  document.documentElement.dataset.theme = value;
+  document.documentElement.style.colorScheme = value;
+  localStorage.setItem('ai-ouyi-theme', value);
+});
+
+onMounted(() => {
+  const savedTheme = localStorage.getItem('ai-ouyi-theme');
+  theme.value = savedTheme === 'light' ? 'light' : 'dark';
+});
 </script>
 
 <template>
@@ -61,10 +80,10 @@ const section = computed(() => String(route.meta.section ?? '系统'));
           <span class="section-label">{{ section }}</span>
           <h1>{{ title }}</h1>
         </div>
-        <div class="topbar-actions">
+        <button class="topbar-actions theme-toggle" type="button" @click="toggleTheme">
           <span class="status-dot"></span>
-          <span>深色模式</span>
-        </div>
+          <span>{{ themeLabel }}</span>
+        </button>
       </header>
 
       <main class="content">

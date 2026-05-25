@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { fetchStrategies, type StrategySummary } from '../api/strategies';
 import { fetchBacktestJobs, runBacktest, type BacktestResult } from '../api/backtests';
 import {
@@ -9,6 +9,9 @@ import {
   type ValidationResult,
 } from '../api/validation';
 import type { WebJob } from '../api/jobs';
+import StatusTag from '../components/StatusTag.vue';
+import { confirmAction } from '../services/confirm';
+import { realtimeClient, type RealtimeStatus, type TopicMessage } from '../services/realtime';
 
 const loading = ref(false);
 const running = ref(false);
@@ -25,9 +28,50 @@ const minTrades = ref(1);
 const minProfit = ref(0);
 const minProfitFactor = ref(1);
 const maxDrawdown = ref(0.3);
+const realtimeStatus = ref<RealtimeStatus>('closed');
+const pendingJobIds = ref<Set<number>>(new Set());
+const unsubs: Array<() => void> = [];
+const phaseDefinitions = [
+  {
+    key: 'train',
+    title: '训练段',
+    description: '可以用于调参和候选筛选，但不能单独作为晋级证据。',
+  },
+  {
+    key: 'validation',
+    title: '验证段',
+    description: '固定区间的 validation gate，用于晋级到已验证。',
+  },
+  {
+    key: 'test',
+    title: '测试段',
+    description: '留出测试，只在进入 paper/live 前复核；反复使用会污染判断。',
+  },
+  {
+    key: 'custom',
+    title: '自定义',
+    description: '诊断用途，默认不参与 promotion evidence。',
+  },
+];
 
 const selectedStrategyRow = computed(() =>
   strategies.value.find((strategy) => strategy.slug === selectedStrategy.value),
+);
+const selectedPhaseDefinition = computed(() =>
+  phaseDefinitions.find((item) => item.key === phase.value),
+);
+const selectedTestUseCount = computed(() =>
+  jobs.value.filter((job) => {
+    const result = resultOf(job);
+    const jobPhase = result?.phase ?? job.payload.phase;
+    const jobStrategy = result?.strategy_slug ?? job.payload.strategy_slug;
+    const jobProfile = result?.profile_name ?? job.payload.profile_name;
+    return (
+      jobPhase === 'test' &&
+      jobStrategy === selectedStrategy.value &&
+      jobProfile === selectedStrategyRow.value?.active_profile
+    );
+  }).length,
 );
 
 async function loadBacktestData() {
@@ -42,6 +86,7 @@ async function loadBacktestData() {
     strategies.value = strategyRows;
     jobs.value = jobRows;
     validationJobs.value = validationRows;
+    reconcilePendingJobs([...jobRows, ...validationRows]);
     if (!selectedStrategy.value && strategyRows.length > 0) {
       selectedStrategy.value = strategyRows[0].slug;
     }
@@ -54,21 +99,23 @@ async function loadBacktestData() {
 
 async function submitBacktest() {
   if (!selectedStrategy.value) return;
-  const confirmed = window.confirm(`为 ${selectedStrategy.value} 发起回测任务？`);
+  const confirmed = await confirmAction({
+    title: '发起回测任务',
+    content: `将为 ${selectedStrategy.value} 创建回测任务。任务会异步执行，可在任务系统查看状态。`,
+    okText: '发起',
+  });
   if (!confirmed) return;
   running.value = true;
   error.value = '';
   try {
-    await runBacktest({
+    const job = await runBacktest({
       strategy_slug: selectedStrategy.value,
       profile_name: selectedStrategyRow.value?.active_profile ?? null,
       phase: phase.value,
       timerange: timerange.value || null,
     });
+    pendingJobIds.value = new Set([...pendingJobIds.value, job.id]);
     jobs.value = await fetchBacktestJobs(50);
-    window.setTimeout(() => {
-      void loadBacktestData();
-    }, 3000);
   } catch (err) {
     error.value = err instanceof Error ? err.message : '回测任务发起失败';
     jobs.value = await fetchBacktestJobs(50).catch(() => jobs.value);
@@ -79,12 +126,16 @@ async function submitBacktest() {
 
 async function submitValidation() {
   if (!selectedStrategy.value) return;
-  const confirmed = window.confirm(`为 ${selectedStrategy.value} 运行验证闸门？`);
+  const confirmed = await confirmAction({
+    title: '运行验证闸门',
+    content: `将为 ${selectedStrategy.value} 创建验证任务，并按当前阈值判断是否通过。`,
+    okText: '验证',
+  });
   if (!confirmed) return;
   running.value = true;
   validationError.value = '';
   try {
-    await runValidation({
+    const job = await runValidation({
       strategy_slug: selectedStrategy.value,
       profile_name: selectedStrategyRow.value?.active_profile ?? null,
       timerange: validationTimerange.value || null,
@@ -96,16 +147,56 @@ async function submitValidation() {
       min_avg_profit: 0,
       min_trades_per_day: 0,
     });
+    pendingJobIds.value = new Set([...pendingJobIds.value, job.id]);
     validationJobs.value = await fetchValidationJobs(50);
-    window.setTimeout(() => {
-      void loadBacktestData();
-    }, 3000);
   } catch (err) {
     validationError.value = err instanceof Error ? err.message : '验证任务发起失败';
     validationJobs.value = await fetchValidationJobs(50).catch(() => validationJobs.value);
   } finally {
     running.value = false;
   }
+}
+
+async function refreshBacktestJobs() {
+  try {
+    const [jobRows, validationRows] = await Promise.all([
+      fetchBacktestJobs(50),
+      fetchValidationJobs(50),
+    ]);
+    jobs.value = jobRows;
+    validationJobs.value = validationRows;
+    reconcilePendingJobs([...jobRows, ...validationRows]);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '回测任务刷新失败';
+  }
+}
+
+function handleJobsTopic(message: TopicMessage<{ items?: WebJob[] }>) {
+  if (message.event !== 'changed') {
+    return;
+  }
+  const related = message.payload.items?.some((job) =>
+    ['backtest', 'validation'].includes(job.job_type),
+  );
+  if (!related) {
+    return;
+  }
+  void refreshBacktestJobs();
+}
+
+function reconcilePendingJobs(rows: WebJob[]) {
+  if (pendingJobIds.value.size === 0) {
+    running.value = false;
+    return;
+  }
+  const nextPending = new Set(pendingJobIds.value);
+  for (const row of rows) {
+    if (nextPending.has(row.id) && ['success', 'failed'].includes(row.status)) {
+      nextPending.delete(row.id);
+    }
+  }
+  pendingJobIds.value = nextPending;
+  running.value = nextPending.size > 0;
 }
 
 function resultOf(job: WebJob): BacktestResult | null {
@@ -127,11 +218,11 @@ function metric(job: WebJob, key: keyof BacktestResult['metrics']): string {
   return '-';
 }
 
-function statusClass(status: WebJob['status']): string {
-  if (status === 'success') return 'badge-ok';
-  if (status === 'failed') return 'badge-danger';
-  if (status === 'running') return 'badge-info';
-  return 'badge-muted';
+function statusTone(status: WebJob['status']): 'default' | 'success' | 'processing' | 'error' {
+  if (status === 'success') return 'success';
+  if (status === 'failed') return 'error';
+  if (status === 'running') return 'processing';
+  return 'default';
 }
 
 function statusText(status: WebJob['status']): string {
@@ -172,26 +263,30 @@ function fileName(value: string | undefined): string {
 function validationMessageText(value: string | undefined | null): string {
   if (!value) return '-';
   return value
+    .replaceAll('min_profit_factor', '最低利润因子')
+    .replaceAll('profit_factor', '利润因子')
     .replaceAll('total_trades', '交易数')
     .replaceAll('min_trades', '最少交易数')
     .replaceAll('profit_total', '总收益')
     .replaceAll('min_profit', '最低收益')
-    .replaceAll('profit_factor', '利润因子')
-    .replaceAll('min_profit_factor', '最低利润因子')
     .replaceAll('max_drawdown_account', '账户最大回撤')
     .replaceAll('max_drawdown', '最大回撤')
-    .replaceAll('winrate', '胜率')
     .replaceAll('min_winrate', '最低胜率')
-    .replaceAll('avg_profit', '平均收益')
+    .replaceAll('winrate', '胜率')
     .replaceAll('min_avg_profit', '最低平均收益')
-    .replaceAll('trades_per_day', '日均交易数')
-    .replaceAll('min_trades_per_day', '最低日均交易数');
+    .replaceAll('avg_profit', '平均收益')
+    .replaceAll('min_trades_per_day', '最低日均交易数')
+    .replaceAll('trades_per_day', '日均交易数');
 }
 
 async function promoteFromValidation(job: WebJob) {
   const result = validationOf(job);
   if (!result?.passed) return;
-  const confirmed = window.confirm(`将 ${result.strategy_slug}/${result.profile_name} 晋级为“已验证”？`);
+  const confirmed = await confirmAction({
+    title: '晋级参数档案',
+    content: `将 ${result.strategy_slug}/${result.profile_name} 晋级为“已验证”。`,
+    okText: '晋级',
+  });
   if (!confirmed) return;
   validationError.value = '';
   try {
@@ -202,7 +297,19 @@ async function promoteFromValidation(job: WebJob) {
   }
 }
 
-onMounted(loadBacktestData);
+onMounted(() => {
+  void loadBacktestData();
+  unsubs.push(
+    realtimeClient.onStatus((status) => {
+      realtimeStatus.value = status;
+    }),
+    realtimeClient.subscribe('jobs', handleJobsTopic as (message: TopicMessage) => void),
+  );
+});
+
+onBeforeUnmount(() => {
+  unsubs.splice(0).forEach((unsubscribe) => unsubscribe());
+});
 </script>
 
 <template>
@@ -210,9 +317,14 @@ onMounted(loadBacktestData);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>回测任务</span>
-        <button class="icon-button" type="button" :disabled="loading" @click="loadBacktestData">
-          刷新
-        </button>
+        <div class="panel-actions">
+          <StatusTag :tone="realtimeStatus === 'open' ? 'success' : 'default'">
+            实时通道{{ realtimeStatus === 'open' ? '已连接' : '连接中' }}
+          </StatusTag>
+          <button class="icon-button" type="button" :disabled="loading" @click="loadBacktestData">
+            刷新
+          </button>
+        </div>
       </div>
 
       <div class="backtest-form">
@@ -251,8 +363,23 @@ onMounted(loadBacktestData);
           :disabled="running || !selectedStrategy"
           @click="submitBacktest"
         >
-          发起
+          {{ running ? '运行中' : '发起' }}
         </button>
+      </div>
+      <div class="phase-governance">
+        <div v-for="item in phaseDefinitions" :key="item.key" :class="['phase-card', item.key === phase ? 'phase-card-active' : '']">
+          <strong>{{ item.title }}</strong>
+          <p>{{ item.description }}</p>
+        </div>
+      </div>
+      <div v-if="selectedPhaseDefinition" class="runtime-note phase-note">
+        当前选择：{{ selectedPhaseDefinition.description }}
+      </div>
+      <div v-if="phase === 'test' && selectedTestUseCount > 0" class="error-line">
+        当前 profile 已有 {{ selectedTestUseCount }} 次 test 记录。test 是留出复核集，避免反复调参污染。
+      </div>
+      <div v-if="phase === 'custom'" class="runtime-note phase-note">
+        custom 结果只用于诊断，默认不会作为晋级证据。
       </div>
       <div v-if="error" class="error-line">{{ error }}</div>
     </div>
@@ -260,7 +387,7 @@ onMounted(loadBacktestData);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>验证闸门</span>
-        <span class="badge badge-muted">{{ validationJobs.length }}</span>
+        <StatusTag>{{ validationJobs.length }}</StatusTag>
       </div>
 
       <div class="backtest-form">
@@ -290,7 +417,7 @@ onMounted(loadBacktestData);
           :disabled="running || !selectedStrategy"
           @click="submitValidation"
         >
-          验证
+          {{ running ? '运行中' : '验证' }}
         </button>
       </div>
       <div v-if="validationError" class="error-line">{{ validationError }}</div>
@@ -316,18 +443,17 @@ onMounted(loadBacktestData);
             <tr v-for="job in validationJobs" :key="job.id">
               <td class="numeric">#{{ job.id }}</td>
               <td>
-                <span
-                  :class="[
-                    'badge',
+                <StatusTag
+                  :tone="
                     job.status !== 'success'
-                      ? statusClass(job.status)
+                      ? statusTone(job.status)
                       : validationOf(job)?.passed
-                        ? 'badge-ok'
-                        : 'badge-danger',
-                  ]"
+                        ? 'success'
+                        : 'error'
+                  "
                 >
                   {{ job.status !== 'success' ? statusText(job.status) : validationOf(job)?.passed ? '通过' : '未通过' }}
-                </span>
+                </StatusTag>
               </td>
               <td>{{ validationOf(job)?.strategy_slug ?? job.payload.strategy_slug }}</td>
               <td>{{ validationOf(job)?.profile_name ?? job.payload.profile_name ?? '-' }}</td>
@@ -361,7 +487,7 @@ onMounted(loadBacktestData);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>回测结果</span>
-        <span class="badge badge-muted">{{ jobs.length }}</span>
+        <StatusTag>{{ jobs.length }}</StatusTag>
       </div>
 
       <div class="table-wrap">
@@ -385,7 +511,7 @@ onMounted(loadBacktestData);
           <tbody>
             <tr v-for="job in jobs" :key="job.id">
               <td class="numeric">#{{ job.id }}</td>
-              <td><span :class="['badge', statusClass(job.status)]">{{ statusText(job.status) }}</span></td>
+              <td><StatusTag :tone="statusTone(job.status)">{{ statusText(job.status) }}</StatusTag></td>
               <td>{{ resultOf(job)?.strategy_slug ?? job.payload.strategy_slug }}</td>
               <td>{{ phaseText(resultOf(job)?.phase ?? job.payload.phase) }}</td>
               <td>{{ resultOf(job)?.timerange ?? job.payload.timerange ?? '-' }}</td>

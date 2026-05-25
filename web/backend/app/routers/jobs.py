@@ -50,7 +50,7 @@ def job_detail(job_id: int) -> dict:
 
 @router.post("/jobs")
 def create_and_run_job(payload: JobRequest) -> dict:
-    if payload.job_type in {"backtest", "validation"}:
+    if payload.job_type in {"materialize", "backtest", "validation", "optimization"}:
         job = create_job(payload.job_type, payload.payload)
         start_job_process(int(job["id"]))
         return job

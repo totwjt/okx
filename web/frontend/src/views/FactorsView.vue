@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { fetchFactorsHealth, type FactorDataset, type FactorsHealth } from '../api/factors';
+import StatusTag from '../components/StatusTag.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -50,17 +51,17 @@ function intervalText(seconds: unknown): string {
   return `${seconds}s`;
 }
 
-function statusClass(row: FactorDataset): string {
+function statusTone(row: FactorDataset): 'default' | 'success' | 'warning' | 'error' {
   if (!row.ok) {
-    return 'badge-danger';
+    return 'error';
   }
   if ((row.gap_count ?? 0) > 0) {
-    return 'badge-warn';
+    return 'warning';
   }
   if ((row.rows ?? 0) === 0) {
-    return 'badge-muted';
+    return 'default';
   }
-  return 'badge-ok';
+  return 'success';
 }
 
 function statusText(row: FactorDataset): string {
@@ -132,7 +133,7 @@ onMounted(loadFactors);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>资金费率覆盖</span>
-        <span class="badge badge-muted">{{ health?.coverage.funding.length ?? 0 }}</span>
+        <StatusTag>{{ health?.coverage.funding.length ?? 0 }}</StatusTag>
       </div>
       <div class="table-wrap">
         <table class="dense-table factor-table">
@@ -159,7 +160,7 @@ onMounted(loadFactors);
               <td>{{ dateText(row.end) }}</td>
               <td class="numeric">{{ numberText(row.gap_count) }}</td>
               <td class="numeric">{{ numberText(row.missing_intervals) }}</td>
-              <td><span class="badge" :class="statusClass(row)">{{ statusText(row) }}</span></td>
+              <td><StatusTag :tone="statusTone(row)">{{ statusText(row) }}</StatusTag></td>
             </tr>
             <tr v-if="health && health.coverage.funding.length === 0">
               <td colspan="9">暂无资金费率数据集</td>
@@ -172,7 +173,7 @@ onMounted(loadFactors);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>OHLCV 覆盖</span>
-        <span class="badge badge-muted">{{ health?.coverage.ohlcv.length ?? 0 }}</span>
+        <StatusTag>{{ health?.coverage.ohlcv.length ?? 0 }}</StatusTag>
       </div>
       <div class="table-wrap">
         <table class="dense-table factor-table">
@@ -199,7 +200,7 @@ onMounted(loadFactors);
               <td>{{ dateText(row.end) }}</td>
               <td class="numeric">{{ numberText(row.gap_count) }}</td>
               <td class="numeric">{{ numberText(row.missing_intervals) }}</td>
-              <td><span class="badge" :class="statusClass(row)">{{ statusText(row) }}</span></td>
+              <td><StatusTag :tone="statusTone(row)">{{ statusText(row) }}</StatusTag></td>
             </tr>
             <tr v-if="health && health.coverage.ohlcv.length === 0">
               <td colspan="9">暂无 OHLCV 数据集</td>
@@ -212,7 +213,7 @@ onMounted(loadFactors);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>缺口样本</span>
-        <span class="badge badge-muted">{{ worstGaps.length }}</span>
+        <StatusTag>{{ worstGaps.length }}</StatusTag>
       </div>
       <div class="table-wrap">
         <table class="dense-table gap-table">

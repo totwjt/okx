@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { fetchPaperSummary, type PaperSummary } from '../api/paper';
+import StatusTag from '../components/StatusTag.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -89,7 +90,7 @@ onMounted(loadPaper);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>当前持仓</span>
-        <span class="badge badge-muted">{{ summary?.open_trades.count ?? 0 }}</span>
+        <StatusTag>{{ summary?.open_trades.count ?? 0 }}</StatusTag>
       </div>
       <div v-if="summary && !summary.open_trades.ok" class="error-line">
         {{ summary.open_trades.error }}
@@ -128,7 +129,7 @@ onMounted(loadPaper);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>最近交易</span>
-        <span class="badge badge-muted">{{ summary?.recent_trades.items.length ?? 0 }}</span>
+        <StatusTag>{{ summary?.recent_trades.items.length ?? 0 }}</StatusTag>
       </div>
       <div v-if="summary && !summary.recent_trades.ok" class="error-line">
         {{ summary.recent_trades.error }}

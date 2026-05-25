@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { fetchSystemCheck, type SystemCheck } from '../api/system';
 import { fetchStrategies, type StrategySummary } from '../api/strategies';
 import {
@@ -7,6 +7,10 @@ import {
   materializeRuntime,
   type RuntimeArtifact,
 } from '../api/runtime';
+import type { WebJob } from '../api/jobs';
+import StatusTag from '../components/StatusTag.vue';
+import { confirmAction } from '../services/confirm';
+import { realtimeClient, type RealtimeStatus, type TopicMessage } from '../services/realtime';
 
 const loading = ref(false);
 const materializing = ref(false);
@@ -15,6 +19,9 @@ const systemCheck = ref<SystemCheck | null>(null);
 const strategies = ref<StrategySummary[]>([]);
 const selectedStrategy = ref('');
 const artifacts = ref<RuntimeArtifact[]>([]);
+const pendingJobId = ref<number | null>(null);
+const realtimeStatus = ref<RealtimeStatus>('closed');
+const unsubs: Array<() => void> = [];
 
 async function loadRuntimeData() {
   loading.value = true;
@@ -42,20 +49,66 @@ async function runMaterialize() {
   if (!selectedStrategy.value) {
     return;
   }
-  const confirmed = window.confirm(`为 ${selectedStrategy.value} 生成运行产物？`);
+  const confirmed = await confirmAction({
+    title: '生成运行产物',
+    content: `将为 ${selectedStrategy.value} 生成 Freqtrade 运行策略文件和参数文件。完成后列表会通过实时通道自动刷新。`,
+    okText: '生成',
+  });
   if (!confirmed) {
     return;
   }
   materializing.value = true;
   error.value = '';
   try {
-    await materializeRuntime(selectedStrategy.value);
+    const job = await materializeRuntime(selectedStrategy.value);
+    pendingJobId.value = job.id;
+    if (job.status === 'failed') {
+      throw new Error(job.error_summary ?? '运行产物生成失败');
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '运行产物生成失败';
+    materializing.value = false;
+    pendingJobId.value = null;
+  }
+}
+
+async function refreshRuntimeArtifacts() {
+  try {
     artifacts.value = await fetchRuntimeArtifacts(50);
     systemCheck.value = await fetchSystemCheck();
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '运行产物生成失败';
-  } finally {
+    error.value = err instanceof Error ? err.message : '运行产物刷新失败';
+  }
+}
+
+function handleRuntimeTopic(message: TopicMessage<{ items?: RuntimeArtifact[] }>) {
+  if (message.event !== 'changed') {
+    return;
+  }
+  if (Array.isArray(message.payload.items)) {
+    artifacts.value = message.payload.items;
+  } else {
+    void refreshRuntimeArtifacts();
+  }
+}
+
+function handleJobsTopic(message: TopicMessage<{ items?: WebJob[] }>) {
+  if (message.event !== 'changed' || pendingJobId.value === null) {
+    return;
+  }
+  const job = message.payload.items?.find((item) => item.id === pendingJobId.value);
+  if (!job) {
+    return;
+  }
+  if (job.status === 'success') {
     materializing.value = false;
+    pendingJobId.value = null;
+    void refreshRuntimeArtifacts();
+  }
+  if (job.status === 'failed') {
+    materializing.value = false;
+    pendingJobId.value = null;
+    error.value = job.error_summary ?? '运行产物生成失败';
   }
 }
 
@@ -93,11 +146,26 @@ function artifactTypeText(type: string): string {
     strategy_py: '策略代码',
     params_json: '参数文件',
     strategy_json: '策略参数',
+    freqtrade_strategy_py: '策略代码',
+    freqtrade_params_json: '参数文件',
   };
   return labels[type] ?? type;
 }
 
-onMounted(loadRuntimeData);
+onMounted(() => {
+  void loadRuntimeData();
+  unsubs.push(
+    realtimeClient.onStatus((status) => {
+      realtimeStatus.value = status;
+    }),
+    realtimeClient.subscribe('runtime.artifacts', handleRuntimeTopic as (message: TopicMessage) => void),
+    realtimeClient.subscribe('jobs', handleJobsTopic as (message: TopicMessage) => void),
+  );
+});
+
+onBeforeUnmount(() => {
+  unsubs.splice(0).forEach((unsubscribe) => unsubscribe());
+});
 </script>
 
 <template>
@@ -111,7 +179,7 @@ onMounted(loadRuntimeData);
           :disabled="materializing || !selectedStrategy"
           @click="runMaterialize"
         >
-          生成
+          {{ materializing ? '生成中' : '生成' }}
         </button>
       </div>
 
@@ -124,14 +192,16 @@ onMounted(loadRuntimeData);
             </option>
           </select>
         </label>
-        <div class="runtime-note">操作会写入运行策略目录，并刷新产物元数据列表。</div>
+        <div class="runtime-note">
+          操作会写入运行策略目录；实时通道 {{ realtimeStatus === 'open' ? '已连接' : '连接中' }}，完成后自动刷新。
+        </div>
       </div>
     </div>
 
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>运行产物</span>
-        <span class="badge badge-muted">{{ artifacts.length }}</span>
+        <StatusTag>{{ artifacts.length }}</StatusTag>
       </div>
       <div class="table-wrap">
         <table class="dense-table artifact-table">
@@ -177,9 +247,9 @@ onMounted(loadRuntimeData);
         <div v-for="(check, name) in systemCheck.checks" :key="name" class="check-tile">
           <div class="check-title">
             <span>{{ checkNameText(name) }}</span>
-            <span :class="['badge', check.ok ? 'badge-ok' : 'badge-warn']">
+            <StatusTag :tone="check.ok ? 'success' : 'warning'">
               {{ check.ok ? '正常' : '警告' }}
-            </span>
+            </StatusTag>
           </div>
           <pre>{{ check }}</pre>
         </div>

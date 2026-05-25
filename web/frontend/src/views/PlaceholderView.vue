@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import StatusTag from '../components/StatusTag.vue';
 
 const route = useRoute();
 const title = computed(() => String(route.meta.title ?? '模块'));
@@ -11,7 +12,7 @@ const title = computed(() => String(route.meta.title ?? '模块'));
     <div class="panel">
       <div class="panel-header">
         <span>{{ title }}</span>
-        <span class="badge badge-muted">TASK 待接入</span>
+        <StatusTag>TASK 待接入</StatusTag>
       </div>
       <div class="placeholder-body">
         <div class="metric-row">
@@ -30,4 +31,3 @@ const title = computed(() => String(route.meta.title ?? '模块'));
     </div>
   </section>
 </template>
-

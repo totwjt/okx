@@ -35,7 +35,7 @@ create index if not exists web_jobs_status_idx on web_jobs(status);
 
 BACKTEST_RESULT_DIR = PROJECT_ROOT / "execution/freqtrade/user_data/backtest_results/web_jobs"
 CONTAINER_BACKTEST_RESULT_DIR = "/freqtrade/user_data/backtest_results/web_jobs"
-SUPPORTED_JOB_TYPES = {"materialize", "backtest", "validation"}
+SUPPORTED_JOB_TYPES = {"materialize", "backtest", "validation", "optimization"}
 _SCHEMA_LOCK = Lock()
 _SCHEMA_INITIALIZED = False
 
@@ -305,6 +305,21 @@ def _execute_job(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _run_backtest_job(payload)
     if job_type == "validation":
         return _run_validation_job(payload)
+    if job_type == "optimization":
+        from app.services.optimization_service import auto_tune_strategy
+
+        strategy_slug = str(payload.get("strategy_slug") or "").strip()
+        if not strategy_slug:
+            raise RuntimeError("strategy_slug is required")
+        baseline_profile = payload.get("baseline_profile")
+        if baseline_profile is not None:
+            baseline_profile = str(baseline_profile).strip() or None
+        return auto_tune_strategy(
+            strategy_slug,
+            baseline_profile,
+            candidate_count=int(payload.get("candidate_count") or 3),
+            run_backtests=bool(payload.get("run_backtests", True)),
+        )
     raise RuntimeError(f"unsupported job type: {job_type}")
 
 

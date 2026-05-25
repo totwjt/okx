@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { fetchJobs, type WebJob } from '../api/jobs';
+import StatusTag from '../components/StatusTag.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -18,11 +19,11 @@ async function loadJobs() {
   }
 }
 
-function statusClass(status: WebJob['status']): string {
-  if (status === 'success') return 'badge-ok';
-  if (status === 'failed') return 'badge-danger';
-  if (status === 'running') return 'badge-info';
-  return 'badge-muted';
+function statusTone(status: WebJob['status']): 'default' | 'success' | 'processing' | 'error' {
+  if (status === 'success') return 'success';
+  if (status === 'failed') return 'error';
+  if (status === 'running') return 'processing';
+  return 'default';
 }
 
 function statusText(status: WebJob['status']): string {
@@ -93,7 +94,7 @@ onMounted(loadJobs);
               <td class="numeric">#{{ job.id }}</td>
               <td>{{ jobTypeText(job.job_type) }}</td>
               <td>
-                <span :class="['badge', statusClass(job.status)]">{{ statusText(job.status) }}</span>
+                <StatusTag :tone="statusTone(job.status)">{{ statusText(job.status) }}</StatusTag>
               </td>
               <td class="json-cell" :title="compactJson(job.payload)">
                 {{ compactJson(job.payload) }}

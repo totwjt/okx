@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { fetchRiskSummary, type RiskSummary } from '../api/risk';
+import StatusTag from '../components/StatusTag.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -60,17 +61,17 @@ function checkLimit(check: { key: string; limit?: number }): string {
   return pctRatio(check.limit);
 }
 
-function badgeClass(status: string): string {
+function statusTone(status: string): 'default' | 'success' | 'processing' | 'error' {
   if (status === 'ok' || status === 'standby') {
-    return 'badge-ok';
+    return 'success';
   }
   if (status === 'active') {
-    return 'badge-info';
+    return 'processing';
   }
   if (status === 'breach') {
-    return 'badge-danger';
+    return 'error';
   }
-  return 'badge-muted';
+  return 'default';
 }
 
 function statusText(status: string): string {
@@ -163,7 +164,7 @@ onMounted(loadRisk);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>风控检查</span>
-        <span class="badge badge-muted">只读</span>
+        <StatusTag>只读</StatusTag>
       </div>
       <div class="table-wrap">
         <table class="dense-table risk-check-table">
@@ -180,7 +181,7 @@ onMounted(loadRisk);
               <td>{{ checkLabelText(check.key, check.label) }}</td>
               <td class="numeric">{{ checkValue(check) }}</td>
               <td class="numeric">{{ checkLimit(check) }}</td>
-              <td><span class="badge" :class="badgeClass(check.status)">{{ statusText(check.status) }}</span></td>
+              <td><StatusTag :tone="statusTone(check.status)">{{ statusText(check.status) }}</StatusTag></td>
             </tr>
             <tr v-if="summary && summary.checks.length === 0">
               <td colspan="4">暂无检查项</td>
@@ -194,7 +195,7 @@ onMounted(loadRisk);
       <div class="panel">
         <div class="panel-header">
           <span>规则</span>
-          <span class="badge badge-muted">{{ summary?.strategy.profile_status ?? '-' }}</span>
+          <StatusTag>{{ summary?.strategy.profile_status ?? '-' }}</StatusTag>
         </div>
         <div class="placeholder-body">
           <div v-for="row in ruleRows" :key="row[0]" class="metric-row">
@@ -207,7 +208,7 @@ onMounted(loadRisk);
       <div class="panel">
         <div class="panel-header">
           <span>冷却锁定</span>
-          <span class="badge badge-muted">{{ summary?.metrics.cooldown.active_locks ?? 0 }}</span>
+          <StatusTag>{{ summary?.metrics.cooldown.active_locks ?? 0 }}</StatusTag>
         </div>
         <div class="table-wrap">
           <table class="dense-table lock-table">
@@ -240,7 +241,7 @@ onMounted(loadRisk);
     <div class="panel panel-wide">
       <div class="panel-header">
         <span>最近已平仓交易</span>
-        <span class="badge badge-muted">{{ summary?.recent_closed_trades.length ?? 0 }}</span>
+        <StatusTag>{{ summary?.recent_closed_trades.length ?? 0 }}</StatusTag>
       </div>
       <div class="table-wrap">
         <table class="dense-table risk-trade-table">

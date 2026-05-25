@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import RuntimeView from '../views/RuntimeView.vue';
 import BacktestsView from '../views/BacktestsView.vue';
 import StrategiesView from '../views/StrategiesView.vue';
+import LifecycleView from '../views/LifecycleView.vue';
 import JobsView from '../views/JobsView.vue';
 import PaperView from '../views/PaperView.vue';
 import RiskView from '../views/RiskView.vue';
@@ -17,6 +18,12 @@ export const router = createRouter({
       name: 'strategies',
       component: StrategiesView,
       meta: { title: '策略管理', section: '策略注册表' },
+    },
+    {
+      path: '/lifecycle',
+      name: 'lifecycle',
+      component: LifecycleView,
+      meta: { title: '生命周期工作台', section: '策略全流程' },
     },
     {
       path: '/backtests',

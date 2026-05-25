@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import factors, health, jobs, paper, registry, risk, system
+from app.routers import factors, health, jobs, lifecycle, optimization, paper, registry, risk, system, ws
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -24,10 +24,13 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(system.router, prefix="/api")
     app.include_router(registry.router, prefix="/api")
+    app.include_router(lifecycle.router, prefix="/api")
+    app.include_router(optimization.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
     app.include_router(paper.router, prefix="/api")
     app.include_router(risk.router, prefix="/api")
     app.include_router(factors.router, prefix="/api")
+    app.include_router(ws.router, prefix="/api")
 
     if FRONTEND_DIST.exists():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

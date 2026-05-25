@@ -8,6 +8,7 @@ import {
   type StrategyProfile,
   type StrategySummary,
 } from '../api/strategies';
+import StatusTag from '../components/StatusTag.vue';
 
 const loading = ref(false);
 const detailLoading = ref(false);
@@ -29,21 +30,21 @@ const visibleSpecKeys = computed(() => {
   return Object.keys(selectedStrategy.value.spec).filter((key) => !hiddenKeys.has(key)).sort();
 });
 
-function statusClass(status: string): string {
+function statusTone(status: string): 'default' | 'success' | 'processing' | 'warning' | 'error' {
   const normalized = status.toLowerCase();
   if (['validated', 'paper_active'].includes(normalized)) {
-    return 'badge-ok';
+    return 'success';
   }
   if (['candidate', 'live_candidate'].includes(normalized)) {
-    return 'badge-info';
+    return 'processing';
   }
   if (normalized === 'live_active') {
-    return 'badge-danger';
+    return 'error';
   }
   if (normalized === 'archived') {
-    return 'badge-muted';
+    return 'default';
   }
-  return 'badge-warn';
+  return 'warning';
 }
 
 function statusText(status: string): string {
@@ -147,7 +148,7 @@ onMounted(loadStrategies);
             <small>{{ strategy.slug }}</small>
           </span>
           <span class="strategy-row-meta">
-            <span :class="['badge', statusClass(strategy.status)]">{{ statusText(strategy.status) }}</span>
+            <StatusTag :tone="statusTone(strategy.status)">{{ statusText(strategy.status) }}</StatusTag>
             <span class="numeric">{{ strategy.profile_count }}</span>
           </span>
         </button>
@@ -158,9 +159,9 @@ onMounted(loadStrategies);
       <div class="panel">
         <div class="panel-header">
           <span>{{ selectedSummary?.name ?? '策略详情' }}</span>
-          <span v-if="selectedSummary" :class="['badge', statusClass(selectedSummary.status)]">
+          <StatusTag v-if="selectedSummary" :tone="statusTone(selectedSummary.status)">
             {{ statusText(selectedSummary.status) }}
-          </span>
+          </StatusTag>
         </div>
 
         <div v-if="detailLoading" class="placeholder-body">加载中</div>
@@ -191,7 +192,7 @@ onMounted(loadStrategies);
       <div class="panel">
         <div class="panel-header">
           <span>参数档案状态</span>
-          <span class="badge badge-muted">{{ activeProfiles.length }} 个生效</span>
+          <StatusTag>{{ activeProfiles.length }} 个生效</StatusTag>
         </div>
         <div class="table-wrap">
           <table class="dense-table">
@@ -210,7 +211,7 @@ onMounted(loadStrategies);
               <tr v-for="profile in profiles" :key="profile.profile_name">
                 <td class="name-cell">{{ profile.profile_name }}</td>
                 <td>
-                  <span :class="['badge', statusClass(profile.status)]">{{ statusText(profile.status) }}</span>
+                  <StatusTag :tone="statusTone(profile.status)">{{ statusText(profile.status) }}</StatusTag>
                 </td>
                 <td>{{ profile.is_active ? '是' : '-' }}</td>
                 <td>{{ profile.source ?? '-' }}</td>
@@ -226,7 +227,7 @@ onMounted(loadStrategies);
       <div class="panel">
         <div class="panel-header">
           <span>策略定义摘要</span>
-          <span class="badge badge-muted">不展示生成代码</span>
+          <StatusTag>不展示生成代码</StatusTag>
         </div>
         <div class="spec-summary">
           <div v-for="key in visibleSpecKeys" :key="key" class="spec-chip">

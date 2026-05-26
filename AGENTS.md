@@ -10,6 +10,7 @@
 ```
 AI-OuYi/
 ├── .opencode/              # OpenCode 配置与知识库
+├── ai_runtime/             # AI 运行时适配层（Skill/MCP/AI 工具任务）
 ├── apps/prototypes/         # 原型级机器人（非生产）
 ├── data/sync/              # 外部数据同步
 ├── docs/operations/        # 运行文档
@@ -37,6 +38,8 @@ AI-OuYi/
 | CLI 命令 | `strategies/cli.py` | 主 CLI |
 | 知识库 | `.opencode/knowledge-base/` | 项目知识 |
 | Web 管理系统 | `web/` | FastAPI + React 管理层 |
+| AI 生成策略 SOP | `docs/operations/ai-strategy-generation-sop.md` | 每次 AI 生成策略必须先读并按 step 推进 |
+| AI Runtime 任务 | `ai_runtime/TASKS.md` | Skill/MCP 实现任务入口 |
 
 ## CODE MAP
 | 符号 | 类型 | 位置 | 说明 |
@@ -57,6 +60,8 @@ AI-OuYi/
 - ❌ 把实验策略放 `strategies/` 主目录 → `research/experiments/`
 - ❌ 依赖 Freqtrade 内建下载 funding_rate 等合约因子
 - ❌ 在 Web 前端恢复历史前端技术栈
+- ❌ AI 生成策略时跳过 `docs/operations/ai-strategy-generation-sop.md`
+- ❌ 把 Web scaffold 当成最终策略 spec
 
 ## COMMANDS
 ```bash
@@ -83,3 +88,10 @@ cd web/frontend && npm run build
 - 数据层 = `execution/freqtrade/user_data/external_data/`
 - Web 前端 = `React + Vite + TypeScript + Tailwind CSS + shadcn/ui + Radix UI + lucide-react + TanStack Query/Table`
 - 当前运行默认：`GridLsV1Strategy`，但仓库维护 3 条生成链
+
+## AI 生成策略规则
+
+- 每次 AI 生成或改造策略前，必须先读 `docs/operations/ai-strategy-generation-sop.md`。
+- 开工时必须声明当前按该 SOP 执行，并显示当前 Step。
+- API 只负责登记、保存、materialize、证据记录等机械步骤；策略假设、spec 设计、参数边界、风险判断必须由 AI 用专业策略知识完成。
+- 发现问题时必须判断作用域：影响一类策略或生成链路的，上升为系统级问题；只影响当前策略参数的，作为策略级问题处理。

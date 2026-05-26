@@ -1,0 +1,37 @@
+profile_name: default
+strategy_name: okx_sol_crash_rebound_v2
+status: candidate
+source: web_hypothesis_reviewed
+overrides:
+  factors:
+    rsi_oversold:
+      value: 26
+    volume:
+      ratio_threshold: 1.2
+      ma_period: 24
+    atr:
+      entry_max: 0.065
+      exit_max: 0.08
+    zscore:
+      entry_abs: 1.1
+      exit_abs: 0.45
+  risk_model:
+    max_open_trades: 1
+  minimal_roi:
+    "0": 0.018
+    "45": 0.010
+    "120": 0.003
+    "240": 0.0
+  stoploss: -0.025
+  trailing_stop: true
+  trailing_stop_positive: 0.006
+  trailing_stop_positive_offset: 0.014
+  trailing_only_offset_is_reached: true
+validation:
+  thesis:
+    market: OKX SOL/USDT:USDT futures
+    hypothesis_zh: 急跌后只有出现下影修复、收阳确认且价格未严重偏离中期均线时，SOL 短周期反弹的胜率更高。
+    invalidation_zh: 如果 train 仍持续亏损或 validation 交易数不足，应停止该急跌抄底方向而非继续用 test 调参。
+  notes_zh:
+    - V2 是结构性候选，不是 V1 profile 微调。
+    - 目标是过滤继续下跌段，改善 train 样本上的止损比例。

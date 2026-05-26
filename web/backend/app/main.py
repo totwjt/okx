@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import factors, health, jobs, lifecycle, optimization, paper, registry, risk, system, ws
+from app.routers import data, factors, health, jobs, lifecycle, optimization, paper, registry, risk, system, ws
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -27,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(lifecycle.router, prefix="/api")
     app.include_router(optimization.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
+    app.include_router(data.router, prefix="/api")
     app.include_router(paper.router, prefix="/api")
     app.include_router(risk.router, prefix="/api")
     app.include_router(factors.router, prefix="/api")

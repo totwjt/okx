@@ -52,6 +52,7 @@ export const api = {
     (await apiJson<{ items: WebJob[] }>(`/api/validation/results?limit=${limit}`)).items,
   runBacktest: (payload: BacktestPayload) => api.createJob('backtest', { ...payload }),
   runValidation: (payload: ValidationPayload) => api.createJob('validation', { ...payload }),
+  ensureData: (payload: Record<string, unknown>) => postJson<WebJob>('/api/data/ensure', payload),
   promoteProfile: (strategySlug: string, profileName: string, toStatus = 'validated') =>
     postJson<{ promoted: boolean }>('/api/profiles/promote', {
       strategy_slug: strategySlug,

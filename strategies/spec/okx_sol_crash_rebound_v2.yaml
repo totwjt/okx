@@ -1,0 +1,105 @@
+name: OKX SOL 急跌反弹确认策略
+description: 面向 OKX SOL/USDT 永续合约的急跌反弹研究策略 V2。相比 V1，增加收阳、下影修复和中期均线偏离过滤，避免在急跌尚未止住时直接接入。
+version: "0.2"
+status: draft
+lifecycle_origin: web_hypothesis
+market:
+  exchange: okx
+  pair: SOL/USDT:USDT
+  quote: USDT
+  contract_type: perpetual
+timeframe: 15m
+trading_mode: futures
+margin_mode: isolated
+can_short: false
+train_timerange: 20250101-20250930
+validation_timerange: 20251001-20251130
+test_timerange: 20251201-
+cost_model:
+  fee: 0.001
+  slippage_bps: 8
+  funding_rate_included: false
+risk_model:
+  max_open_trades: 1
+  max_drawdown_pct: 10.0
+  max_daily_loss_pct: 2.0
+  max_consecutive_losses: 3
+  cooldown_candles_after_loss_streak: 12
+  stoploss_guard_lookback_candles: 96
+  max_drawdown_lookback_candles: 192
+  max_drawdown_trade_limit: 12
+  protections_in_config_required: true
+minimal_roi:
+  "0": 0.018
+  "45": 0.010
+  "120": 0.003
+  "240": 0.0
+stoploss: -0.025
+trailing_stop: true
+trailing_stop_positive: 0.006
+trailing_stop_positive_offset: 0.014
+trailing_only_offset_is_reached: true
+optimization:
+  epochs: 80
+  timerange: 20250101-20250930
+  hyperopt_loss: ShortTradeDurHyperOptLoss
+factors:
+  ma:
+    enabled: true
+    type: EMA
+    period: 96
+    range: [48, 160]
+    space: buy
+  rsi:
+    enabled: true
+    period: 14
+    range: [7, 28]
+    space: buy
+  rsi_oversold:
+    enabled: true
+    value: 26
+    range: [18, 34]
+    space: buy
+  bb:
+    enabled: true
+    period: 28
+    std: 2.1
+    std_range: [1.7, 2.8]
+  volume:
+    enabled: true
+    ma_period: 24
+    ratio_threshold: 1.2
+    ratio_range: [0.8, 2.5]
+  atr:
+    enabled: true
+    period: 14
+    period_range: [7, 28]
+    entry_max: 0.065
+    entry_max_range: [0.025, 0.09]
+    exit_max: 0.08
+    exit_max_range: [0.035, 0.12]
+  zscore:
+    enabled: true
+    period: 48
+    period_range: [24, 96]
+    entry_abs: 1.1
+    entry_abs_range: [0.8, 2.4]
+    exit_abs: 0.45
+    exit_abs_range: [0.15, 1.0]
+derived_indicators:
+  - name: crash_return_1h
+    formula: dataframe['close'].pct_change(4)
+  - name: crash_return_3h
+    formula: dataframe['close'].pct_change(12)
+  - name: bb_lower_distance
+    formula: (dataframe['close'] - dataframe['bb_lower']) / dataframe['close'].replace(0, np.nan)
+  - name: lower_wick_recovery
+    formula: (dataframe['close'] - dataframe['low']) / dataframe['close'].replace(0, np.nan)
+  - name: ma_damage
+    formula: dataframe['close'] / dataframe['ma'].replace(0, np.nan)
+entry_conditions:
+  long: "(dataframe['crash_return_1h'] <= -0.025) & (dataframe['crash_return_3h'] <= -0.045) & (dataframe['close'] <= dataframe['bb_lower'] * 1.02) & (dataframe['bb_lower_distance'] <= 0.02) & (dataframe['close'] > dataframe['open']) & (dataframe['lower_wick_recovery'] >= 0.012) & (dataframe['ma_damage'] >= 0.88) & (dataframe['rsi'] <= rsi_oversold) & (dataframe['volume_ratio'] >= volume_ratio_threshold) & (dataframe['atr_pct'] <= atr_entry_max) & (dataframe['zscore'] <= -zscore_entry_abs) & (dataframe['volume'] > 0)"
+  short: "False"
+exit_conditions:
+  long: "(dataframe['rsi'] >= 45) | (dataframe['close'] >= dataframe['bb_middle']) | (dataframe['zscore'] >= -zscore_exit_abs) | (dataframe['atr_pct'] >= atr_exit_max)"
+  short: "False"

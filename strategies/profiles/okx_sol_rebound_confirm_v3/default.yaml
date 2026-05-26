@@ -1,0 +1,37 @@
+profile_name: default
+strategy_name: okx_sol_rebound_confirm_v3
+status: candidate
+source: web_hypothesis_reviewed
+overrides:
+  factors:
+    rsi_oversold:
+      value: 32
+    volume:
+      ratio_threshold: 1.0
+      ma_period: 24
+    atr:
+      entry_max: 0.075
+      exit_max: 0.09
+    zscore:
+      entry_abs: 0.8
+      exit_abs: 0.5
+  risk_model:
+    max_open_trades: 1
+  minimal_roi:
+    "0": 0.016
+    "45": 0.009
+    "120": 0.003
+    "240": 0.0
+  stoploss: -0.03
+  trailing_stop: true
+  trailing_stop_positive: 0.006
+  trailing_stop_positive_offset: 0.013
+  trailing_only_offset_is_reached: true
+validation:
+  thesis:
+    market: OKX SOL/USDT:USDT futures
+    hypothesis_zh: SOL 在中短期回撤进入超卖区后，只要出现下影修复和价格未严重脱离中期均线，短周期反弹机会比极端急跌抄底更稳定。
+    invalidation_zh: 如果放宽条件后 train 仍亏损或 validation 样本不足，则暂停 SOL 抄底类策略。
+  notes_zh:
+    - V3 从极端急跌切换到超卖回撤反弹，以恢复样本量。
+    - 仍保留 recent_low_rebound、lower_wick_recovery、ma_damage 三个反弹确认过滤。

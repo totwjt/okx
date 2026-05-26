@@ -31,7 +31,7 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
     class_name = strategy_class_name(name)
 
     trading_mode = spec.get("trading_mode", "spot")
-    can_short = spec.get("can_short", False) if trading_mode == "spot" else True
+    can_short = bool(spec.get("can_short", trading_mode != "spot"))
     timeframe = spec.get("timeframe", "15m")
     stoploss = spec.get("stoploss", -0.03)
     minimal_roi = spec.get("minimal_roi", {"0": 0.01})
@@ -210,6 +210,10 @@ def generate_strategy_v2(name: str, spec: dict) -> str:
     exit_cond = spec.get("exit_conditions", {})
     long_exit = exit_cond.get("long", "False").replace("\n", " ").replace("  ", " ")
     short_exit = exit_cond.get("short", "False").replace("\n", " ").replace("  ", " ")
+    long_entry = _as_dataframe_condition(long_entry)
+    short_entry = _as_dataframe_condition(short_entry)
+    long_exit = _as_dataframe_condition(long_exit)
+    short_exit = _as_dataframe_condition(short_exit)
     protections = pprint.pformat(build_protections(spec), indent=8, sort_dicts=False)
 
     return f'''"""
@@ -296,3 +300,11 @@ class {class_name}(IStrategy):
 
         return dataframe
 '''
+
+
+def _as_dataframe_condition(condition: str) -> str:
+    if condition.strip() in {"False", "false", "0"}:
+        return "pd.Series(False, index=dataframe.index)"
+    if condition.strip() in {"True", "true", "1"}:
+        return "pd.Series(True, index=dataframe.index)"
+    return condition

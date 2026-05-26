@@ -1,0 +1,37 @@
+profile_name: default
+strategy_name: okx_sol_crash_rebound_v1
+status: candidate
+source: web_hypothesis_reviewed
+overrides:
+  factors:
+    rsi_oversold:
+      value: 27
+    volume:
+      ratio_threshold: 1.35
+      ma_period: 24
+    atr:
+      entry_max: 0.07
+      exit_max: 0.085
+    zscore:
+      entry_abs: 1.25
+      exit_abs: 0.35
+  risk_model:
+    max_open_trades: 1
+  minimal_roi:
+    "0": 0.028
+    "45": 0.016
+    "120": 0.006
+    "240": 0.0
+  stoploss: -0.045
+  trailing_stop: true
+  trailing_stop_positive: 0.008
+  trailing_stop_positive_offset: 0.018
+  trailing_only_offset_is_reached: true
+validation:
+  thesis:
+    market: OKX SOL/USDT:USDT futures
+    hypothesis_zh: SOL 短时急跌后，在放量恐慌、布林下轨偏离和 RSI 超卖共同确认时，存在短周期均值回归反弹。
+    invalidation_zh: 如果样本外成交过少、连续止损或急跌后继续单边下行导致回撤超限，应降级或废弃。
+  notes_zh:
+    - 单币种、低频、只做多急跌反弹研究策略。
+    - 当前仅完成控制台建档和运行产物生成，尚未通过回测或 paper run。

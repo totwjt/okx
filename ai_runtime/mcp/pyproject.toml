@@ -1,0 +1,17 @@
+[project]
+name = "ai-ouyi-mcp"
+version = "0.1.0"
+description = "MCP wrapper around the AI-OuYi Web API"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.2.0",
+  "pydantic>=2.0",
+  "requests>=2.31",
+]
+
+[project.scripts]
+ai-ouyi-mcp = "ai_ouyi_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

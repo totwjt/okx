@@ -50,7 +50,7 @@ def job_detail(job_id: int) -> dict:
 
 @router.post("/jobs")
 def create_and_run_job(payload: JobRequest) -> dict:
-    if payload.job_type in {"materialize", "backtest", "validation", "optimization"}:
+    if payload.job_type in {"materialize", "data_ensure", "backtest", "validation", "optimization"}:
         job = create_job(payload.job_type, payload.payload)
         if not job.get("deduped"):
             start_job_process(int(job["id"]))

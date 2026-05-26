@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -191,6 +192,75 @@ def create_profile_draft(
     }
     db_service.upsert_profile(strategy_slug, profile, is_active=False)
     return {"strategy_slug": strategy_slug, "profile_name": normalized_profile, "profile": profile}
+
+
+def update_strategy_definition(
+    strategy_slug: str,
+    spec: dict[str, Any],
+    *,
+    profile_name: str | None = None,
+    profile_overrides: dict[str, Any] | None = None,
+    profile_status: str = "candidate",
+    source: str = "ai_generated_spec",
+    validation: dict[str, Any] | None = None,
+    activate_profile: bool = False,
+) -> dict[str, Any]:
+    if not isinstance(spec, dict) or not spec:
+        raise RuntimeError("strategy spec is required")
+    if not _has_executable_definition(spec):
+        raise RuntimeError("strategy spec is incomplete; factors, entry/exit conditions, timeranges and risk_model are required")
+    _validate_strategy_spec_executable(strategy_slug, spec)
+
+    normalized_profile = (profile_name or "default").strip() or "default"
+    name = str(spec.get("name") or strategy_slug).strip()
+    description = str(spec.get("description") or "").strip()
+    if not description:
+        raise RuntimeError("strategy spec description is required")
+
+    profile_payload = {
+        "profile_name": normalized_profile,
+        "status": profile_status or "candidate",
+        "source": source,
+        "overrides": profile_overrides if profile_overrides is not None else _default_profile_overrides(spec),
+        "validation": {
+            **(validation or {}),
+            "definition_source": source,
+            "strategy_name": name,
+        },
+    }
+
+    db_service = _db_service()
+    db_service.init_schema()
+    with db_service.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select 1 from strategy_specs where slug = %s", (strategy_slug,))
+            if not cur.fetchone():
+                raise RuntimeError(f"strategy not found: {strategy_slug}")
+            cur.execute(
+                """
+                update strategy_specs
+                set name = %s,
+                    description = %s,
+                    status = %s,
+                    spec = %s,
+                    updated_at = now()
+                where slug = %s
+                """,
+                (
+                    name,
+                    description,
+                    str(spec.get("status") or "draft"),
+                    Json(spec),
+                    strategy_slug,
+                ),
+            )
+    db_service.upsert_profile(strategy_slug, profile_payload, is_active=activate_profile)
+    return {
+        "strategy_slug": strategy_slug,
+        "profile_name": normalized_profile,
+        "strategy": get_strategy(strategy_slug),
+        "profile": profile_payload,
+    }
 
 
 def scaffold_strategy_definition(strategy_slug: str, profile_name: str | None = None) -> dict[str, Any]:
@@ -448,6 +518,45 @@ def _has_executable_definition(spec: dict[str, Any]) -> bool:
             isinstance(spec.get("risk_model"), dict) and bool(spec.get("risk_model")),
         ]
     )
+
+
+def _validate_strategy_spec_executable(strategy_slug: str, spec: dict[str, Any]) -> None:
+    _validate_condition_expressions(spec)
+    generation_service, _runtime_service, _spec_service = _strategy_service_modules()
+    try:
+        code = generation_service.generate_strategy(strategy_slug, spec)
+        compile(code, f"<strategy:{strategy_slug}>", "exec")
+    except Exception as exc:
+        raise RuntimeError(f"strategy spec failed generation validation: {type(exc).__name__}: {exc}") from exc
+
+
+def _validate_condition_expressions(spec: dict[str, Any]) -> None:
+    for section_name in ["entry_conditions", "exit_conditions"]:
+        conditions = spec.get(section_name) or {}
+        if not isinstance(conditions, dict):
+            raise RuntimeError(f"{section_name} must be an object")
+        for side, expression in conditions.items():
+            if not isinstance(expression, str) or not expression.strip():
+                raise RuntimeError(f"{section_name}.{side} must be a non-empty expression string")
+            normalized = expression.strip()
+            if normalized in {"False", "false", "0", "True", "true", "1"}:
+                continue
+            try:
+                tree = ast.parse(normalized, mode="eval")
+            except SyntaxError as exc:
+                raise RuntimeError(f"{section_name}.{side} is not valid Python expression: {exc.msg}") from exc
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == "dataframe":
+                    if not _is_string_subscript(node.slice):
+                        raise RuntimeError(f"{section_name}.{side} uses dataframe[...] without a quoted column name")
+
+
+def _is_string_subscript(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, str)
+    if isinstance(node, ast.Index):  # pragma: no cover - compatibility with older Python ASTs
+        return _is_string_subscript(node.value)
+    return False
 
 
 def list_strategy_profiles(slug: str) -> list[dict[str, Any]] | None:

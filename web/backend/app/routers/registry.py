@@ -13,6 +13,7 @@ from app.services.registry_service import (
     materialize_strategy,
     scaffold_profile_defaults,
     scaffold_strategy_definition,
+    update_strategy_definition,
     update_profile_overrides,
 )
 
@@ -42,6 +43,16 @@ class ProfileDraftRequest(BaseModel):
 
 class ProfileOverridesRequest(BaseModel):
     overrides: dict = Field(default_factory=dict)
+
+
+class StrategyDefinitionRequest(BaseModel):
+    spec: dict = Field(default_factory=dict)
+    profile_name: str | None = None
+    profile_overrides: dict | None = None
+    profile_status: str = "candidate"
+    source: str = "ai_generated_spec"
+    validation: dict = Field(default_factory=dict)
+    activate_profile: bool = False
 
 
 @router.get("/strategies")
@@ -97,6 +108,23 @@ def create_profile(slug: str, payload: ProfileDraftRequest) -> dict:
 def scaffold_definition(slug: str, profile_name: str | None = None) -> dict:
     try:
         return scaffold_strategy_definition(slug, profile_name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/strategies/{slug}/definition")
+def update_definition(slug: str, payload: StrategyDefinitionRequest) -> dict:
+    try:
+        return update_strategy_definition(
+            slug,
+            payload.spec,
+            profile_name=payload.profile_name,
+            profile_overrides=payload.profile_overrides,
+            profile_status=payload.profile_status,
+            source=payload.source,
+            validation=payload.validation,
+            activate_profile=payload.activate_profile,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

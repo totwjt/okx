@@ -10,7 +10,7 @@ from typing import Any
 from psycopg2.extras import Json
 
 from app.services.registry_service import materialize_strategy
-from app.services.system_check import PROJECT_ROOT, _load_strategy_services
+from app.services.system_check import COMPOSE_FILE, PROJECT_ROOT, _load_strategy_services
 
 
 JOB_SCHEMA_SQL = """
@@ -35,7 +35,8 @@ create index if not exists web_jobs_status_idx on web_jobs(status);
 
 BACKTEST_RESULT_DIR = PROJECT_ROOT / "execution/freqtrade/user_data/backtest_results/web_jobs"
 CONTAINER_BACKTEST_RESULT_DIR = "/freqtrade/user_data/backtest_results/web_jobs"
-SUPPORTED_JOB_TYPES = {"materialize", "backtest", "validation", "optimization"}
+CONTAINER_CONFIG_PATH = "/freqtrade/user_data/config.json"
+SUPPORTED_JOB_TYPES = {"materialize", "data_ensure", "backtest", "validation", "optimization"}
 _SCHEMA_LOCK = Lock()
 _SCHEMA_INITIALIZED = False
 
@@ -341,13 +342,13 @@ def execute_job(job_id: int) -> dict[str, Any]:
         raise RuntimeError(f"job not found: {job_id}")
     mark_job_running(job_id)
     try:
-        result = _execute_job(str(job["job_type"]), dict(job["payload"] or {}))
+        result = _execute_job(job_id, str(job["job_type"]), dict(job["payload"] or {}))
     except Exception as exc:
         return mark_job_failed(job_id, str(exc))
     return mark_job_success(job_id, result)
 
 
-def _execute_job(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _execute_job(job_id: int, job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     if job_type not in SUPPORTED_JOB_TYPES:
         raise RuntimeError(f"unsupported job type: {job_type}")
     if job_type == "materialize":
@@ -358,10 +359,12 @@ def _execute_job(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         if profile_name is not None:
             profile_name = str(profile_name).strip() or None
         return materialize_strategy(strategy_slug, profile_name)
+    if job_type == "data_ensure":
+        return _run_data_ensure_job(payload)
     if job_type == "backtest":
-        return _run_backtest_job(payload)
+        return _run_backtest_job(payload, job_id=job_id)
     if job_type == "validation":
-        return _run_validation_job(payload)
+        return _run_validation_job(payload, job_id=job_id)
     if job_type == "optimization":
         from app.services.optimization_service import auto_tune_strategy
 
@@ -392,7 +395,131 @@ def _strategy_service_modules() -> tuple[Any, Any, Any, Any]:
     return profile_validation_service, runtime_service, spec_service, _db_service()
 
 
-def _run_backtest_job(payload: dict[str, Any]) -> dict[str, Any]:
+def _run_freqtrade_compose(args: list[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    cmd = [
+        "docker",
+        "compose",
+        "-f",
+        str(COMPOSE_FILE),
+        "run",
+        "--rm",
+        "freqtrade",
+        *args,
+    ]
+    return subprocess.run(
+        cmd,
+        cwd=PROJECT_ROOT,
+        text=True,
+        capture_output=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+
+
+def _command_error_tail(completed: subprocess.CompletedProcess[str]) -> str:
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+    lines = output.strip().splitlines()
+    return "\n".join(lines[-30:]) or f"command failed with code {completed.returncode}"
+
+
+def _resolve_strategy_bundle(payload: dict[str, Any]) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    _profile_validation_service, _runtime_service, spec_service, db_service = _strategy_service_modules()
+    strategy_slug = str(payload.get("strategy_slug") or "").strip()
+    if not strategy_slug:
+        raise RuntimeError("strategy_slug is required")
+    profile_name = payload.get("profile_name")
+    if profile_name is not None:
+        profile_name = str(profile_name).strip() or None
+    spec, profile = db_service.load_strategy_bundle(strategy_slug, profile_name)
+    effective_spec = spec_service.apply_profile_overrides(spec, profile)
+    return strategy_slug, effective_spec, profile, spec_service
+
+
+def _timerange_with_closed_end(timerange: str) -> str:
+    if "-" not in timerange:
+        return timerange
+    start, end = timerange.split("-", 1)
+    if end:
+        return timerange
+    return f"{start}-{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+
+
+def _default_data_timerange(spec: dict[str, Any], spec_service: Any) -> str:
+    timeranges = spec_service.get_timeranges(spec)
+    start_candidates = []
+    end_candidates = []
+    for value in timeranges.values():
+        value = _timerange_with_closed_end(str(value or "").strip())
+        if "-" not in value:
+            continue
+        start, end = value.split("-", 1)
+        if start:
+            start_candidates.append(start)
+        if end:
+            end_candidates.append(end)
+    if not start_candidates:
+        raise RuntimeError("unable to infer data timerange from strategy spec")
+    start = min(start_candidates)
+    end = max(end_candidates) if end_candidates else datetime.now(timezone.utc).strftime("%Y%m%d")
+    return f"{start}-{end}"
+
+
+def _run_data_ensure_job(payload: dict[str, Any]) -> dict[str, Any]:
+    strategy_slug, effective_spec, profile, spec_service = _resolve_strategy_bundle(payload)
+    market = effective_spec.get("market") or {}
+    pair = str(payload.get("pair") or market.get("pair") or "").strip()
+    if not pair:
+        raise RuntimeError("pair is required; set payload.pair or spec.market.pair")
+
+    timeframe = str(payload.get("timeframe") or effective_spec.get("timeframe") or "15m").strip()
+    trading_mode = str(payload.get("trading_mode") or effective_spec.get("trading_mode") or "futures").strip()
+    timerange = str(payload.get("timerange") or _default_data_timerange(effective_spec, spec_service)).strip()
+    timerange = _timerange_with_closed_end(timerange)
+
+    cmd_args = [
+        "download-data",
+        "-c",
+        CONTAINER_CONFIG_PATH,
+        "--trading-mode",
+        trading_mode,
+        "--timerange",
+        timerange,
+        "-t",
+        timeframe,
+        "-p",
+        pair,
+    ]
+    if payload.get("erase"):
+        cmd_args.append("--erase")
+    if payload.get("no_parallel_download"):
+        cmd_args.append("--no-parallel-download")
+    candle_types = payload.get("candle_types")
+    if isinstance(candle_types, list) and candle_types:
+        cmd_args.append("--candle-types")
+        cmd_args.extend(str(item) for item in candle_types)
+
+    completed = _run_freqtrade_compose(
+        cmd_args,
+        timeout_seconds=int(payload.get("timeout_seconds") or 1800),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(_command_error_tail(completed))
+
+    data_dir = PROJECT_ROOT / "execution/freqtrade/user_data/data/okx"
+    files = sorted(str(path) for path in data_dir.glob("**/*") if path.is_file() and pair.replace("/", "_").replace(":", "_") in path.name)
+    return {
+        "strategy_slug": strategy_slug,
+        "profile_name": profile["profile_name"],
+        "pair": pair,
+        "timeframe": timeframe,
+        "trading_mode": trading_mode,
+        "timerange": timerange,
+        "files": files,
+        "stdout_tail": "\n".join((completed.stdout or "").strip().splitlines()[-20:]),
+    }
+
+
+def _run_backtest_job(payload: dict[str, Any], *, job_id: int | None = None) -> dict[str, Any]:
     profile_validation_service, runtime_service, spec_service, db_service = _strategy_service_modules()
     strategy_slug = str(payload.get("strategy_slug") or "").strip()
     if not strategy_slug:
@@ -413,8 +540,12 @@ def _run_backtest_job(payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("timerange is required")
 
     materialize_result = materialize_strategy(strategy_slug, profile.get("profile_name"))
-    BACKTEST_RESULT_DIR.mkdir(parents=True, exist_ok=True)
-    before = {path.name for path in BACKTEST_RESULT_DIR.glob("*.zip")}
+    result_dir = BACKTEST_RESULT_DIR / f"job_{job_id}" if job_id is not None else BACKTEST_RESULT_DIR
+    container_result_dir = (
+        f"{CONTAINER_BACKTEST_RESULT_DIR}/job_{job_id}" if job_id is not None else CONTAINER_BACKTEST_RESULT_DIR
+    )
+    result_dir.mkdir(parents=True, exist_ok=True)
+    before = {path.name for path in result_dir.glob("*.zip")}
 
     strategy_name = runtime_service.strategy_class_name(strategy_slug)
     config_path = spec_service.get_config_path(effective_spec)
@@ -422,10 +553,6 @@ def _run_backtest_job(payload: dict[str, Any]) -> dict[str, Any]:
     enable_protections = bool(spec_service.build_protections(effective_spec))
 
     cmd = [
-        "docker",
-        "exec",
-        "freqtrade",
-        "freqtrade",
         "backtesting",
         "-c",
         config_path,
@@ -438,26 +565,21 @@ def _run_backtest_job(payload: dict[str, Any]) -> dict[str, Any]:
         "--export",
         "trades",
         "--backtest-directory",
-        CONTAINER_BACKTEST_RESULT_DIR,
+        container_result_dir,
     ]
     if cost_model.get("fee") is not None:
         cmd.extend(["--fee", str(cost_model["fee"])])
     if enable_protections:
         cmd.append("--enable-protections")
 
-    completed = subprocess.run(
+    completed = _run_freqtrade_compose(
         cmd,
-        cwd=PROJECT_ROOT,
-        text=True,
-        capture_output=True,
-        timeout=int(payload.get("timeout_seconds") or 900),
-        check=False,
+        timeout_seconds=int(payload.get("timeout_seconds") or 900),
     )
     if completed.returncode != 0:
-        stderr_tail = (completed.stderr or completed.stdout or "").strip().splitlines()[-20:]
-        raise RuntimeError("\n".join(stderr_tail) or f"backtest failed with code {completed.returncode}")
+        raise RuntimeError(_command_error_tail(completed))
 
-    latest_zip = profile_validation_service.latest_created_backtest_zip(before, BACKTEST_RESULT_DIR)
+    latest_zip = profile_validation_service.latest_created_backtest_zip(before, result_dir)
     raw_metrics = profile_validation_service.read_backtest_summary(latest_zip, strategy_name)
     metrics = profile_validation_service.normalize_backtest_metrics(raw_metrics)
 
@@ -469,15 +591,16 @@ def _run_backtest_job(payload: dict[str, Any]) -> dict[str, Any]:
         "timerange": timerange,
         "metrics": metrics,
         "backtest_zip": str(latest_zip),
+        "backtest_directory": str(result_dir),
         "materialize": materialize_result,
-        "command": cmd,
+        "command": ["docker", "compose", "-f", str(COMPOSE_FILE), "run", "--rm", "freqtrade", *cmd],
     }
 
 
-def _run_validation_job(payload: dict[str, Any]) -> dict[str, Any]:
+def _run_validation_job(payload: dict[str, Any], *, job_id: int | None = None) -> dict[str, Any]:
     backtest_payload = dict(payload)
     backtest_payload["phase"] = "validation"
-    backtest_result = _run_backtest_job(backtest_payload)
+    backtest_result = _run_backtest_job(backtest_payload, job_id=job_id)
     metrics = dict(backtest_result["metrics"])
     timerange = str(backtest_result["timerange"])
 

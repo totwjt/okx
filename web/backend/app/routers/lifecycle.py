@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.services.evidence_gate_service import run_evidence_check
 from app.services.lifecycle_service import (
+    advance_profile,
     demote_profile,
     lifecycle_strategies,
     profile_lifecycle,
@@ -45,6 +46,10 @@ class ThesisUpdateRequest(BaseModel):
     thesis: dict = Field(default_factory=dict)
 
 
+class AdvanceRequest(BaseModel):
+    candidate_count: int = Field(default=3, ge=3, le=6)
+
+
 @router.get("/strategies")
 def strategies() -> dict:
     return {"items": lifecycle_strategies()}
@@ -78,6 +83,14 @@ def evidence_check(strategy_slug: str, profile_name: str, payload: EvidenceCheck
             target_status=payload.target_status,
             thresholds=payload.thresholds,
         )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/{strategy_slug}/profiles/{profile_name}/advance")
+def advance(strategy_slug: str, profile_name: str, payload: AdvanceRequest) -> dict:
+    try:
+        return advance_profile(strategy_slug, profile_name, candidate_count=payload.candidate_count)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

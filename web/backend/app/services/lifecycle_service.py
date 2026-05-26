@@ -5,7 +5,7 @@ from typing import Any
 from psycopg2.extras import Json
 
 from app.services.evidence_gate_service import run_evidence_check
-from app.services.jobs_service import init_job_schema
+from app.services.jobs_service import create_job, init_job_schema, start_job_process
 from app.services.paper_run_service import current_paper_run
 from app.services.registry_service import get_strategy, list_strategies, list_strategy_profiles
 from app.services.runtime_alignment_service import runtime_alignment
@@ -203,10 +203,13 @@ def profile_lifecycle(strategy_slug: str, profile_name: str) -> dict[str, Any] |
     if not profile:
         return None
 
-    context = _load_profile_context(strategy_slug, profile_name)
+    paper_run = current_paper_run(strategy_slug, profile_name)
+    context = {
+        **_load_profile_context(strategy_slug, profile_name),
+        "paper_run": paper_run,
+    }
     steps = _build_steps(strategy, profile, context)
     alignment = runtime_alignment(strategy_slug, profile_name)
-    paper_run = current_paper_run(strategy_slug, profile_name)
     thesis = _profile_thesis(profile)
     current_step = next((step for step in steps if step["status"] in {"blocked", "pending"}), steps[-1])
     blocked_reasons = [reason for step in steps for reason in step["blocked_reasons"] if step["status"] == "blocked"]
@@ -228,12 +231,106 @@ def profile_lifecycle(strategy_slug: str, profile_name: str) -> dict[str, Any] |
             "blocked_reasons": blocked_reasons[:8],
             "next_actions": next_actions[:8],
         },
+        "assistant_plan": _assistant_plan(current_step["key"], strategy, profile, context),
         "alignment": alignment,
         "paper_run": paper_run,
         "thesis": thesis,
         "thesis_required_fields": THESIS_FIELDS,
         "promotion_events": context["promotions"][:8],
         "steps": steps,
+    }
+
+
+def advance_profile(
+    strategy_slug: str,
+    profile_name: str,
+    *,
+    candidate_count: int = 3,
+) -> dict[str, Any]:
+    lifecycle = profile_lifecycle(strategy_slug, profile_name)
+    if not lifecycle:
+        raise RuntimeError(f"profile lifecycle not found: {strategy_slug}/{profile_name}")
+    step_key = lifecycle["summary"]["current_step_key"]
+    jobs: list[dict[str, Any]] = []
+    notes: list[str] = []
+
+    if step_key in {"hypothesis", "definition", "profile"}:
+        return {
+            "advanced": False,
+            "step_key": step_key,
+            "jobs": jobs,
+            "notes_zh": [
+                "当前步骤需要补充策略假设、spec 或参数档案内容。",
+                "建议在 Codex 终端对话中让 AI 生成 spec/profile 草稿，再从工作台刷新。",
+            ],
+        }
+    if step_key == "runtime_artifact":
+        job = create_job("materialize", {"strategy_slug": strategy_slug, "profile_name": profile_name})
+        if not job.get("deduped"):
+            start_job_process(int(job["id"]))
+        jobs.append(job)
+        notes.append("已创建运行产物生成任务；完成后工作台会进入 train 调优。")
+    elif step_key == "train":
+        job = create_job(
+            "optimization",
+            {
+                "strategy_slug": strategy_slug,
+                "baseline_profile": profile_name,
+                "candidate_count": max(3, min(candidate_count, 6)),
+                "run_backtests": True,
+            },
+        )
+        if not job.get("deduped"):
+            start_job_process(int(job["id"]))
+        jobs.append(job)
+        notes.append("已创建自动候选参数与 train 回测任务；候选不会自动晋级。")
+    elif step_key == "validation":
+        job = create_job(
+            "validation",
+            {
+                "strategy_slug": strategy_slug,
+                "profile_name": profile_name,
+                "min_trades": 30,
+                "min_profit": 0,
+                "min_profit_factor": 1.05,
+                "max_drawdown": 0.25,
+                "min_winrate": 0.35,
+                "min_avg_profit": 0,
+                "min_trades_per_day": 0.05,
+                "max_repeats": 1,
+            },
+        )
+        if not job.get("deduped"):
+            start_job_process(int(job["id"]))
+        jobs.append(job)
+        notes.append("已创建 validation gate；同参数档案同区间默认只保留一个非失败任务。")
+    elif step_key == "test":
+        job = create_job(
+            "backtest",
+            {
+                "strategy_slug": strategy_slug,
+                "profile_name": profile_name,
+                "phase": "test",
+                "max_repeats": 1,
+            },
+        )
+        if not job.get("deduped"):
+            start_job_process(int(job["id"]))
+        jobs.append(job)
+        notes.append("已创建 test 留出回测；test 结果只用于复核，不用于调参。")
+    else:
+        return {
+            "advanced": False,
+            "step_key": step_key,
+            "jobs": jobs,
+            "notes_zh": ["paper/live/归档阶段需要人工确认，不由自动推进直接处理。"],
+        }
+
+    return {
+        "advanced": bool(jobs),
+        "step_key": step_key,
+        "jobs": jobs,
+        "notes_zh": notes,
     }
 
 
@@ -429,7 +526,78 @@ def _profile_thesis(profile: dict[str, Any]) -> dict[str, Any]:
     return {
         "values": values,
         "missing_fields": missing,
-        "complete": not missing,
+        "complete": True,
+        "recommended_missing_fields": missing,
+    }
+
+
+def _assistant_plan(
+    step_key: str,
+    strategy: dict[str, Any],
+    profile: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    strategy_name = strategy.get("name") or strategy["slug"]
+    prompt = (
+        f"请作为 AI-OuYi 策略研究助手，基于 {strategy_name} / {profile['profile_name']} "
+        "生成下一步可执行方案。需要说明参数变化、回测阶段、晋级条件和停止条件。"
+    )
+    plan_by_step = {
+        "hypothesis": {
+            "mode_zh": "AI 起草，人工确认",
+            "can_auto_advance": False,
+            "next_step_zh": "补齐中文策略假设、收益来源、适用市场和失效条件。",
+        },
+        "definition": {
+            "mode_zh": "AI 起草，人工确认",
+            "can_auto_advance": False,
+            "next_step_zh": "生成或修复 spec，明确因子、入场、出场和风控定义。",
+        },
+        "profile": {
+            "mode_zh": "AI 起草，人工确认",
+            "can_auto_advance": False,
+            "next_step_zh": "从 baseline 生成候选 profile，记录参数改动理由。",
+        },
+        "runtime_artifact": {
+            "mode_zh": "程序单向推进",
+            "can_auto_advance": True,
+            "next_step_zh": "创建 materialize 任务，生成 runtime strategy 与 params artifact。",
+        },
+        "train": {
+            "mode_zh": "AI 分支调优",
+            "can_auto_advance": True,
+            "next_step_zh": "生成 3-6 个候选参数档案，并分别跑 train 回测。",
+        },
+        "validation": {
+            "mode_zh": "程序验证闸门",
+            "can_auto_advance": True,
+            "next_step_zh": "运行 validation gate；失败后回到候选参数池，不直接改 test。",
+        },
+        "test": {
+            "mode_zh": "程序留出复核",
+            "can_auto_advance": True,
+            "next_step_zh": "仅对通过 validation 的 profile 跑 test 留出回测。",
+        },
+        "paper": {
+            "mode_zh": "人工晋级",
+            "can_auto_advance": False,
+            "next_step_zh": "检查 runtime 对齐、validation/test 证据和风控后再创建模拟盘。",
+        },
+    }
+    plan = plan_by_step.get(
+        step_key,
+        {
+            "mode_zh": "人工复核",
+            "can_auto_advance": False,
+            "next_step_zh": "当前阶段涉及运行风险或归档，需要人工确认。",
+        },
+    )
+    return {
+        **plan,
+        "codex_prompt_zh": prompt,
+        "attempt_policy_zh": "同一策略、参数档案、阶段、timerange 默认只允许 1 个 pending/running/success 任务；需要重跑时显式 force。",
+        "branching_policy_zh": "train 可产生多个候选 profile；validation/test 不调参，只验证和淘汰。",
+        "recent_job_count": len(context.get("jobs") or []),
     }
 
 
@@ -488,10 +656,14 @@ def _hypothesis_step(strategy: dict[str, Any], profile: dict[str, Any], context:
         evidence.append({"label_zh": "策略说明", "value": strategy["description"], "source": "strategy_specs.description"})
     else:
         blocked.append("strategy_specs.description 为空，缺少可读的策略假设说明。")
-    if thesis["complete"]:
-        evidence.append({"label_zh": "profile thesis", "value": "完整", "source": "strategy_profiles.validation.thesis"})
+    if thesis["missing_fields"]:
+        evidence.append({
+            "label_zh": "profile thesis",
+            "value": "建议补充：" + "、".join(thesis["missing_fields"]),
+            "source": "strategy_profiles.validation.thesis",
+        })
     else:
-        blocked.append("profile thesis 缺失：" + "、".join(thesis["missing_fields"]))
+        evidence.append({"label_zh": "profile thesis", "value": "已补充", "source": "strategy_profiles.validation.thesis"})
     return {
         "status": "completed" if not blocked else "blocked",
         "evidence": evidence,
@@ -509,11 +681,24 @@ def _definition_step(strategy: dict[str, Any], profile: dict[str, Any], context:
     keys = sorted(spec.keys()) if isinstance(spec, dict) else []
     evidence = [{"label_zh": "spec 字段数", "value": len(keys), "source": "strategy_specs.spec"}] if keys else []
     blocked = [] if keys else ["strategy_specs.spec 为空，无法确认策略定义。"]
+    required = {
+        "factors": "因子定义",
+        "entry_conditions": "入场条件",
+        "exit_conditions": "出场条件",
+        "train_timerange": "train 区间",
+        "validation_timerange": "validation 区间",
+        "test_timerange": "test 区间",
+        "risk_model": "风险模型",
+    }
+    if keys:
+        missing = [label for key, label in required.items() if not spec.get(key)]
+        if missing:
+            blocked.append("策略定义缺少：" + "、".join(missing))
     return {
-        "status": "completed" if keys else "blocked",
+        "status": "completed" if keys and not blocked else "blocked",
         "evidence": evidence + [{"label_zh": "定义摘要字段", "value": ", ".join(keys[:12]), "source": "strategy_specs.spec"}] if keys else [],
         "blocked_reasons": blocked,
-        "next_actions": ["导入或修复策略 spec，再刷新生命周期工作台。"] if blocked else [],
+        "next_actions": ["在策略定义步骤生成基础定义，或由 Codex 补齐正式 spec。"] if blocked else [],
     }
 
 
@@ -584,7 +769,7 @@ def _backtest_step(context: dict[str, Any], phase: str, required_status: str) ->
             "blocked_reasons": [] if job["status"] == "success" else [job.get("error_summary") or f"{phase} 回测任务未成功。"],
             "next_actions": [] if job["status"] == "success" else [f"修复失败原因后重新执行 {phase} 回测。"],
         }
-    locked = not _at_least(required_status, "generated")
+    locked = not (_at_least(required_status, "generated") or _artifact_types(context))
     return {
         "status": "locked" if locked else "pending",
         "evidence": [],
@@ -627,15 +812,27 @@ def _test_step(strategy: dict[str, Any], profile: dict[str, Any], context: dict[
 
 def _paper_step(strategy: dict[str, Any], profile: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     event = _promotion_to(context, "paper_active")
+    paper_run = context.get("paper_run")
     active = profile["status"] == "paper_active" or bool(event)
+    evidence = [{"label_zh": "profile 状态", "value": profile["status"], "source": "strategy_profiles.status"}]
+    if event:
+        evidence.append({"label_zh": "promotion event", "value": f"#{event['id']}", "source": "strategy_promotion_events"})
+    if paper_run:
+        evidence.append({"label_zh": "模拟盘记录", "value": f"#{paper_run['id']} / {paper_run['status']}", "source": "web_paper_runs"})
+    if active:
+        blocked_reasons: list[str] = []
+        next_actions: list[str] = []
+    elif paper_run:
+        blocked_reasons = ["已有模拟盘记录，但尚未人工晋级为 paper_active。"]
+        next_actions = ["复核模拟盘证据后，人工点击晋级 paper_active。"]
+    else:
+        blocked_reasons = ["尚未创建模拟盘记录，或缺少 paper_active 晋级证据。"]
+        next_actions = ["通过 validation/test 基础复核后，创建模拟盘记录并人工晋级。"]
     return {
         "status": "completed" if active else ("pending" if _at_least(profile["status"], "validated") else "locked"),
-        "evidence": [
-            {"label_zh": "profile 状态", "value": profile["status"], "source": "strategy_profiles.status"},
-            {"label_zh": "promotion event", "value": f"#{event['id']}", "source": "strategy_promotion_events"},
-        ] if event else [{"label_zh": "profile 状态", "value": profile["status"], "source": "strategy_profiles.status"}],
-        "blocked_reasons": [] if active else ["尚未晋级为 paper_active，或缺少模拟盘运行证据。"],
-        "next_actions": [] if active else ["通过 validation/test 基础复核后，再进入 paper_active 晋级流程。"],
+        "evidence": evidence,
+        "blocked_reasons": blocked_reasons,
+        "next_actions": next_actions,
     }
 
 

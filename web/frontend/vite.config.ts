@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
+import react from '@vitejs/plugin-react';
+import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,
@@ -18,8 +24,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vue: ['vue', 'vue-router', 'pinia'],
-          antd: ['ant-design-vue', '@ant-design/icons-vue'],
+          react: ['react', 'react-dom', 'react-router-dom'],
+          tanstack: ['@tanstack/react-query', '@tanstack/react-table'],
         },
       },
     },

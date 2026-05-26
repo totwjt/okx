@@ -1,4 +1,5 @@
 export type WebSocketTopic = 'jobs' | 'runtime.artifacts';
+export type RealtimeStatus = 'connecting' | 'open' | 'closed' | 'error';
 
 export interface TopicMessage<T = unknown> {
   topic: WebSocketTopic | 'connection';
@@ -9,7 +10,6 @@ export interface TopicMessage<T = unknown> {
 
 type TopicHandler = (message: TopicMessage) => void;
 type StatusHandler = (status: RealtimeStatus) => void;
-export type RealtimeStatus = 'connecting' | 'open' | 'closed' | 'error';
 
 class RealtimeClient {
   private socket: WebSocket | null = null;
@@ -19,7 +19,7 @@ class RealtimeClient {
   private statusHandlers = new Set<StatusHandler>();
   private status: RealtimeStatus = 'closed';
 
-  subscribe(topic: WebSocketTopic, handler: TopicHandler): () => void {
+  subscribe(topic: WebSocketTopic, handler: TopicHandler) {
     const handlers = this.handlers.get(topic) ?? new Set<TopicHandler>();
     handlers.add(handler);
     this.handlers.set(topic, handlers);
@@ -31,7 +31,7 @@ class RealtimeClient {
     return () => this.unsubscribe(topic, handler);
   }
 
-  onStatus(handler: StatusHandler): () => void {
+  onStatus(handler: StatusHandler) {
     this.statusHandlers.add(handler);
     handler(this.status);
     this.ensureSocket();
@@ -61,7 +61,7 @@ class RealtimeClient {
     };
     this.socket.onerror = () => this.setStatus('error');
     this.socket.onmessage = (event) => {
-      const message = JSON.parse(event.data) as TopicMessage;
+      const message = JSON.parse(event.data as string) as TopicMessage;
       if (message.topic === 'connection') {
         return;
       }
@@ -90,7 +90,7 @@ class RealtimeClient {
     }
   }
 
-  private currentTopicKey(): string {
+  private currentTopicKey() {
     return [...this.handlers.keys()].sort().join(',');
   }
 

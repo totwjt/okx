@@ -55,6 +55,30 @@
 
 ## 运行入口
 
+### Web 管理系统
+
+当前 Web 管理系统在 `web/`，后端保留 FastAPI，前端是 React 技术栈：
+
+- `web/backend/app/main.py`: FastAPI app，托管 `/api/*` 和 `web/frontend/dist`
+- `web/frontend/src/main.tsx`: React 入口与路由
+- `web/frontend/src/api/index.ts`: 统一 API client
+- `web/frontend/src/pages/`: 页面级组件
+- 前端栈：React + Vite + TypeScript + Tailwind CSS + shadcn/ui + Radix UI + lucide-react + TanStack Query/Table
+- UI 组件约定：`web/frontend/components.json` 与 `web/frontend/src/components/ui/`
+
+启动：
+
+```bash
+web/start_web.sh
+```
+
+前端单独构建：
+
+```bash
+cd web/frontend
+npm run build
+```
+
 ### Docker
 
 ```bash

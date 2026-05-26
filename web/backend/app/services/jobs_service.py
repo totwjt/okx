@@ -66,6 +66,13 @@ def _init_job_schema_unlocked() -> None:
 
 def create_job(job_type: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     init_job_schema()
+    normalized_payload = payload or {}
+    if job_type in {"backtest", "validation"} and not normalized_payload.get("force"):
+        existing = _find_existing_execution(job_type, normalized_payload)
+        if existing:
+            existing["deduped"] = True
+            existing["dedupe_reason"] = "same strategy/profile/phase/timerange already has a non-failed job"
+            return existing
     db_service = _db_service()
     with db_service.connect() as conn:
         with conn.cursor() as cur:
@@ -75,9 +82,59 @@ def create_job(job_type: str, payload: dict[str, Any] | None = None) -> dict[str
                 values (%s, %s)
                 returning *
                 """,
-                (job_type, Json(payload or {})),
+                (job_type, Json(normalized_payload)),
             )
             return dict(cur.fetchone())
+
+
+def _find_existing_execution(job_type: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    strategy_slug = str(payload.get("strategy_slug") or "").strip()
+    profile_name = str(payload.get("profile_name") or "").strip()
+    phase = "validation" if job_type == "validation" else str(payload.get("phase") or "validation").strip()
+    timerange = str(payload.get("timerange") or "").strip()
+    max_repeats = int(payload.get("max_repeats") or 1)
+    if not strategy_slug or max_repeats <= 0:
+        return None
+
+    db_service = _db_service()
+    with db_service.connect() as conn:
+        with conn.cursor() as cur:
+            if timerange:
+                cur.execute(
+                    """
+                    select *
+                    from web_jobs
+                    where job_type = %s
+                      and status in ('pending', 'running', 'success')
+                      and payload->>'strategy_slug' = %s
+                      and coalesce(payload->>'profile_name', '') = %s
+                      and coalesce(payload->>'phase', 'validation') = %s
+                      and coalesce(payload->>'timerange', '') = %s
+                    order by created_at desc, id desc
+                    limit %s
+                    """,
+                    (job_type, strategy_slug, profile_name, phase, timerange, max_repeats),
+                )
+            else:
+                cur.execute(
+                    """
+                    select *
+                    from web_jobs
+                    where job_type = %s
+                      and status in ('pending', 'running', 'success')
+                      and payload->>'strategy_slug' = %s
+                      and coalesce(payload->>'profile_name', '') = %s
+                      and coalesce(payload->>'phase', 'validation') = %s
+                      and coalesce(payload->>'timerange', '') = ''
+                    order by created_at desc, id desc
+                    limit %s
+                    """,
+                    (job_type, strategy_slug, profile_name, phase, max_repeats),
+                )
+            rows = list(cur.fetchall())
+            if len(rows) >= max_repeats:
+                return dict(rows[0])
+    return None
 
 
 def start_job_process(job_id: int) -> None:

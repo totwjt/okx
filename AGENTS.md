@@ -1,6 +1,6 @@
 # AI-OuYi PROJECT KNOWLEDGE BASE
 
-**更新**: 2026-04-10 | **分支**: master
+**更新**: 2026-05-25 | **分支**: master
 
 ## 项目定位
 
@@ -23,6 +23,7 @@ AI-OuYi/
 │   ├── generated/          # 自动生成代码
 │   ├── services/          # CLI 服务层
 │   └── cli.py             # 主 CLI 入口
+├── web/                    # Web 管理系统（FastAPI + React）
 ├── AI_CONTEXT.md           # AI 接手上下文
 └── requirements.txt
 ```
@@ -35,6 +36,7 @@ AI-OuYi/
 | 参数档案 | `strategies/profiles/*/` | 46 个 profile |
 | CLI 命令 | `strategies/cli.py` | 主 CLI |
 | 知识库 | `.opencode/knowledge-base/` | 项目知识 |
+| Web 管理系统 | `web/` | FastAPI + React 管理层 |
 
 ## CODE MAP
 | 符号 | 类型 | 位置 | 说明 |
@@ -45,6 +47,8 @@ AI-OuYi/
 | `multi_ls_v3` | strategy | `spec/` | 多空结构化 V3 |
 | `generation_service` | service | `services/` | 代码生成 |
 | `profile_service` | service | `services/` | 参数治理 |
+| `main.tsx` | frontend | `web/frontend/src/` | React Web 入口 |
+| `api/index.ts` | frontend | `web/frontend/src/` | Web 统一 API client |
 
 ## ANTI-PATTERNS (THIS PROJECT)
 - ❌ 把 `execution/templates/` 当主运行目录
@@ -52,6 +56,7 @@ AI-OuYi/
 - ❌ 用测试集调参
 - ❌ 把实验策略放 `strategies/` 主目录 → `research/experiments/`
 - ❌ 依赖 Freqtrade 内建下载 funding_rate 等合约因子
+- ❌ 在 Web 前端恢复历史前端技术栈
 
 ## COMMANDS
 ```bash
@@ -66,10 +71,15 @@ docker exec freqtrade python /freqtrade/user_data/strategies/cli.py run multi_ls
 execution/scripts/simctl up
 execution/scripts/simctl balance
 execution/scripts/simctl status
+
+# Web
+web/start_web.sh
+cd web/frontend && npm run build
 ```
 
 ## 边界
 - 主执行层 = Freqtrade（Docker）
 - 策略源码 = `strategies/`（bind mount 到容器）
 - 数据层 = `execution/freqtrade/user_data/external_data/`
+- Web 前端 = `React + Vite + TypeScript + Tailwind CSS + shadcn/ui + Radix UI + lucide-react + TanStack Query/Table`
 - 当前运行默认：`GridLsV1Strategy`，但仓库维护 3 条生成链

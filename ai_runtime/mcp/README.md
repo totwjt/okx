@@ -21,6 +21,8 @@ GET /api/strategies
 
 If Codex/MCP runs in a sandbox where `127.0.0.1` points somewhere else or local sockets are blocked, set `AI_OUYI_WEB_BASE_URL` to the reachable Web API address and rerun preflight. Do not advance SOP Step 1 until preflight passes.
 
+After Step 5 materialization, run `static_validate_strategy` before any data or backtest job. It performs local static checks against materialized artifacts and advances SOP Step 6 only when generated files are internally consistent.
+
 ## Tool Specs
 
 ### preflight_web_api
@@ -63,6 +65,7 @@ Expected output:
 Failure behavior:
 
 - Return `ok=false` with the configured base URL, source, endpoint checks, and connection or HTTP error details.
+- When local sockets are blocked by a command sandbox, return `likely_sandbox_permission_issue=true` and operator advice.
 - Do not create strategy records, files, jobs, or database rows.
 
 Advances SOP Step: no. It only proves the Web API is reachable before Step 1.
@@ -242,6 +245,43 @@ Failure behavior:
 - Do not edit runtime strategy files.
 
 Advances SOP Step: yes, from Step 5 to Step 6 only when materialization succeeds.
+
+### static_validate_strategy
+
+Step: 6/10 static validation after materialize.
+
+Input schema:
+
+```json
+{
+  "strategy_slug": "string",
+  "expected_timeframe": "string, optional",
+  "expected_can_short": "boolean, optional",
+  "runtime_dir": "string, optional"
+}
+```
+
+Local artifact inputs:
+
+```text
+execution/freqtrade/user_data/runtime_strategies/auto_<strategy_slug>.py
+execution/freqtrade/user_data/runtime_strategies/auto_<strategy_slug>.json
+```
+
+Expected output:
+
+- Python source exists and compiles.
+- Strategy class exists.
+- Optional expected `timeframe` and `can_short` match class attributes.
+- Entry/exit signal columns `enter_long`, `enter_short`, `exit_long`, and `exit_short` are present in generated code.
+- Params JSON exists, parses, and `strategy_name` matches the generated class.
+
+Failure behavior:
+
+- Return `ok=false` with all check evidence in `error.detail`.
+- Do not import Freqtrade, run Docker, run backtests, or edit generated artifacts.
+
+Advances SOP Step: yes, from Step 6 to Step 7 only when all static checks pass.
 
 ### run_backtest
 
@@ -440,6 +480,6 @@ Advances SOP Step: no automatically. It can unblock a fallback decision or contr
 - Workflow advancement: `POST /api/strategies/{slug}/workflow/advance`.
 - System gaps: `POST /api/system-gaps`, `GET /api/system-gaps`.
 - Data coverage: `GET /api/data/coverage`.
-- Materialize and static check: `POST /api/strategies/{slug}/pipeline/materialize-and-check`.
+- Combined materialize and static check: `POST /api/strategies/{slug}/pipeline/materialize-and-check`.
 
 MCP v1 reports these through `report_system_gap`; backend implementation should be handled as a separate Phase 4 task list.

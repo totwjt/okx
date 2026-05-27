@@ -14,6 +14,7 @@ from .schemas import (
     ReportSystemGapRequest,
     RunBacktestRequest,
     RunValidationGateRequest,
+    StaticValidateStrategyRequest,
     ToolResult,
     UpdateStrategyDefinitionRequest,
 )
@@ -132,6 +133,23 @@ def materialize_strategy(
         timeout_wait_seconds=timeout_wait_seconds,
     )
     return _dump(_client().materialize_strategy(request))
+
+
+@mcp.tool()
+def static_validate_strategy(
+    strategy_slug: str,
+    expected_timeframe: str | None = None,
+    expected_can_short: bool | None = None,
+    runtime_dir: str | None = None,
+) -> dict[str, Any]:
+    """Run Step 6 static checks on materialized runtime artifacts without Docker."""
+    request = StaticValidateStrategyRequest(
+        strategy_slug=strategy_slug,
+        expected_timeframe=expected_timeframe,
+        expected_can_short=expected_can_short,
+        runtime_dir=runtime_dir,
+    )
+    return _dump(_client().static_validate_strategy(request))
 
 
 @mcp.tool()

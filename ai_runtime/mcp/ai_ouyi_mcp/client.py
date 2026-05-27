@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import os
 import time
@@ -15,6 +16,7 @@ from .schemas import TERMINAL_JOB_STATUSES, SopStep, ToolError, ToolResult
 DEFAULT_BASE_URL = "http://127.0.0.1:8123"
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SYSTEM_GAPS_DIR = PROJECT_ROOT / "ai_runtime" / "mcp" / "system_gaps"
+RUNTIME_STRATEGIES_DIR = PROJECT_ROOT / "execution" / "freqtrade" / "user_data" / "runtime_strategies"
 
 
 class WebApiError(RuntimeError):
@@ -38,13 +40,21 @@ class AiOuyiWebClient:
             self._probe_endpoint("GET", "/api/strategies"),
         ]
         healthy = all(check.get("ok") for check in checks)
+        permission_issue = any(self._is_likely_local_permission_error(check.get("error")) for check in checks)
         data = {
             "base_url": self.base_url,
             "base_url_source": self.base_url_source,
             "timeout_seconds": self.timeout_seconds,
             "checks": checks,
             "healthy": healthy,
+            "likely_sandbox_permission_issue": permission_issue,
         }
+        if permission_issue:
+            data["advice"] = (
+                "Local loopback access appears blocked by the current command sandbox. "
+                "Run this MCP/Web API call with approved local network permission or set AI_OUYI_WEB_BASE_URL "
+                "to a reachable Web API endpoint, then rerun preflight."
+            )
         if healthy:
             return ToolResult(
                 ok=True,
@@ -107,6 +117,12 @@ class AiOuyiWebClient:
             timeout_wait_seconds=payload.timeout_wait_seconds,
             success_step=SopStep(advances=True, current=5, next=6, note="Materialize job finished successfully."),
             pending_step=SopStep(advances=False, current=5, note="Materialize job created; wait for terminal status before advancing."),
+        )
+
+    def static_validate_strategy(self, payload: BaseModel) -> ToolResult:
+        return self._wrap(
+            lambda: self._static_validate_strategy(payload),
+            SopStep(advances=True, current=6, next=7, note="Static validation passed; data preparation may proceed."),
         )
 
     def run_backtest(self, payload: BaseModel) -> ToolResult:
@@ -239,6 +255,7 @@ class AiOuyiWebClient:
                 "path": path,
                 "url": url,
                 "error": str(exc),
+                "likely_sandbox_permission_issue": self._is_likely_local_permission_error(str(exc)),
             }
         detail = self._response_detail(response)
         return {
@@ -249,6 +266,90 @@ class AiOuyiWebClient:
             "status_code": response.status_code,
             "detail": detail,
         }
+
+    def _static_validate_strategy(self, payload: BaseModel) -> dict[str, Any]:
+        slug = str(payload.strategy_slug)
+        self._validate_slug_for_path(slug)
+        runtime_dir = Path(payload.runtime_dir).expanduser() if payload.runtime_dir else RUNTIME_STRATEGIES_DIR
+        strategy_path = runtime_dir / f"auto_{slug}.py"
+        params_path = runtime_dir / f"auto_{slug}.json"
+        checks: list[dict[str, Any]] = []
+
+        source = self._read_required_text(strategy_path, checks, "strategy_py_exists")
+        params = self._read_json_if_present(params_path, checks)
+
+        tree: ast.Module | None = None
+        if source is not None:
+            try:
+                compile(source, str(strategy_path), "exec")
+                checks.append({"name": "py_compile", "ok": True})
+            except SyntaxError as exc:
+                checks.append({"name": "py_compile", "ok": False, "error": f"{exc.__class__.__name__}: {exc}"})
+            try:
+                tree = ast.parse(source, filename=str(strategy_path))
+                checks.append({"name": "ast_parse", "ok": True})
+            except SyntaxError as exc:
+                checks.append({"name": "ast_parse", "ok": False, "error": f"{exc.__class__.__name__}: {exc}"})
+
+        class_info = self._extract_strategy_class_info(tree) if tree is not None else {}
+        public_class_info = {key: value for key, value in class_info.items() if key != "class_node"}
+        checks.append({"name": "strategy_class", "ok": bool(class_info), "detail": public_class_info or None})
+
+        if payload.expected_timeframe is not None:
+            actual = class_info.get("timeframe")
+            checks.append(
+                {
+                    "name": "timeframe_matches_expected",
+                    "ok": actual == payload.expected_timeframe,
+                    "expected": payload.expected_timeframe,
+                    "actual": actual,
+                }
+            )
+        if payload.expected_can_short is not None:
+            actual = class_info.get("can_short")
+            checks.append(
+                {
+                    "name": "can_short_matches_expected",
+                    "ok": actual is payload.expected_can_short,
+                    "expected": payload.expected_can_short,
+                    "actual": actual,
+                }
+            )
+
+        method_columns = self._extract_dataframe_signal_columns(class_info.get("class_node"))
+        checks.append(
+            {
+                "name": "entry_exit_signal_columns",
+                "ok": {"enter_long", "enter_short", "exit_long", "exit_short"}.issubset(method_columns),
+                "required": ["enter_long", "enter_short", "exit_long", "exit_short"],
+                "actual": sorted(method_columns),
+            }
+        )
+
+        if params is not None and class_info.get("class_name") is not None:
+            params_strategy_name = params.get("strategy_name")
+            checks.append(
+                {
+                    "name": "params_strategy_name_matches_class",
+                    "ok": params_strategy_name == class_info.get("class_name"),
+                    "expected": class_info.get("class_name"),
+                    "actual": params_strategy_name,
+                }
+            )
+
+        ok = all(check.get("ok") for check in checks)
+        result = {
+            "strategy_slug": slug,
+            "runtime_dir": str(runtime_dir),
+            "strategy_path": str(strategy_path),
+            "params_path": str(params_path),
+            "class": public_class_info or None,
+            "checks": checks,
+            "passed": ok,
+        }
+        if not ok:
+            raise WebApiError("Static validation failed", detail=result)
+        return result
 
     def _wait_for_job(self, job_id: int, poll_interval_seconds: float, timeout_wait_seconds: int) -> dict[str, Any]:
         deadline = time.monotonic() + timeout_wait_seconds
@@ -291,6 +392,78 @@ class AiOuyiWebClient:
     @staticmethod
     def _job_payload(payload: BaseModel, *, exclude: set[str]) -> dict[str, Any]:
         return payload.model_dump(exclude=exclude, exclude_none=True)
+
+    @staticmethod
+    def _is_likely_local_permission_error(error: Any) -> bool:
+        if not error:
+            return False
+        text = str(error).lower()
+        return "operation not permitted" in text or "permission denied" in text
+
+    @staticmethod
+    def _validate_slug_for_path(slug: str) -> None:
+        if not slug or "/" in slug or "\\" in slug or slug in {".", ".."}:
+            raise WebApiError("Invalid strategy slug for runtime artifact lookup", detail={"strategy_slug": slug})
+
+    @staticmethod
+    def _read_required_text(path: Path, checks: list[dict[str, Any]], name: str) -> str | None:
+        if not path.exists():
+            checks.append({"name": name, "ok": False, "path": str(path), "error": "missing"})
+            return None
+        checks.append({"name": name, "ok": True, "path": str(path)})
+        return path.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _read_json_if_present(path: Path, checks: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not path.exists():
+            checks.append({"name": "params_json_exists", "ok": False, "path": str(path), "error": "missing"})
+            return None
+        checks.append({"name": "params_json_exists", "ok": True, "path": str(path)})
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            checks.append({"name": "params_json_parse", "ok": False, "error": str(exc)})
+            return None
+        checks.append({"name": "params_json_parse", "ok": isinstance(value, dict)})
+        return value if isinstance(value, dict) else None
+
+    @staticmethod
+    def _extract_strategy_class_info(tree: ast.Module | None) -> dict[str, Any]:
+        if tree is None:
+            return {}
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            if not node.name.endswith("Strategy"):
+                continue
+            attrs: dict[str, Any] = {"class_name": node.name, "class_node": node}
+            for statement in node.body:
+                if not isinstance(statement, ast.Assign):
+                    continue
+                for target in statement.targets:
+                    if isinstance(target, ast.Name) and target.id in {"timeframe", "can_short"}:
+                        attrs[target.id] = AiOuyiWebClient._literal_or_none(statement.value)
+            return attrs
+        return {}
+
+    @staticmethod
+    def _extract_dataframe_signal_columns(class_node: ast.ClassDef | None) -> set[str]:
+        columns: set[str] = set()
+        if class_node is None:
+            return columns
+        for node in ast.walk(class_node):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if node.value in {"enter_long", "enter_short", "exit_long", "exit_short"}:
+                columns.add(node.value)
+        return columns
+
+    @staticmethod
+    def _literal_or_none(node: ast.AST) -> Any:
+        try:
+            return ast.literal_eval(node)
+        except (ValueError, TypeError):
+            return None
 
     @staticmethod
     def _wrap(fn: Any, sop_step: SopStep) -> ToolResult:

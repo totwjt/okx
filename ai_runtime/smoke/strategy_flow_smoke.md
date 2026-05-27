@@ -313,3 +313,238 @@ System gaps:
 - Backtest result points to `web_jobs/job_<job_id>/`: yes, `job_70`.
 - Unsupported flow logged as system gap: yes.
 - Smoke strategy cleanup through Web API: not yet supported; logged as system gap.
+
+---
+
+## Real Strategy Flow: okx_sol_intraday_crash_rebound_v1
+
+Run date: 2026-05-27
+
+Scope: both strategy-level research flow and system-level ai-runtime validation.
+
+Result: ai-runtime MCP flow worked through Step 8. The strategy itself failed validation and must not be promoted.
+
+### Step 1: Hypothesis
+
+Tool:
+
+```text
+create_strategy_hypothesis
+```
+
+Result: success after running with local loopback sandbox permission.
+
+Strategy:
+
+```text
+okx_sol_intraday_crash_rebound_v1
+```
+
+AI judgment:
+
+- Market: OKX `SOL/USDT:USDT` perpetual futures.
+- Timeframe: 15m.
+- Direction: long-only, `can_short=false`.
+- Hypothesis: short-term crash, panic volume, and oversold repair can create intraday mean-reversion opportunities.
+- Invalidation: validation trades fewer than 5, profit factor below 1, repeated stoplosses, or negative net expectancy after fees/slippage.
+
+### Step 2-3: Complete Spec And Profile
+
+Tool:
+
+```text
+update_strategy_definition
+```
+
+Result: success.
+
+Profile:
+
+```text
+default
+status: candidate
+source: ai_runtime_mcp_ai_generated_spec
+active_profile: default
+```
+
+Important fields:
+
+```text
+timeframe: 15m
+trading_mode: futures
+margin_mode: isolated
+can_short: false
+train_timerange: 20250101-20250930
+validation_timerange: 20251001-20251130
+test_timerange: 20251201-
+```
+
+### Step 4: Registry State Check
+
+Tool:
+
+```text
+get_strategy_state
+```
+
+Result: success.
+
+Registry confirmed active profile `default`, profile status `candidate`, `timeframe=15m`, and `can_short=false`.
+
+### Step 5: Materialize
+
+Tool:
+
+```text
+materialize_strategy(wait=true)
+```
+
+Web job:
+
+```text
+job_id: 76
+job_type: materialize
+status: success
+```
+
+Artifacts:
+
+```text
+execution/freqtrade/user_data/runtime_strategies/auto_okx_sol_intraday_crash_rebound_v1.py
+execution/freqtrade/user_data/runtime_strategies/auto_okx_sol_intraday_crash_rebound_v1.json
+```
+
+Artifact hashes:
+
+```text
+strategy_py: 43e7076f9a43a427bdbe3f55c5eb95b9fccb6a2495fad5fa64115b36a3e5ea90
+params_json: 00dc335f6bda41377f177ef09443cf3626cb66a50f14232f6380e26192b4353e
+```
+
+### Step 6: Static Validation
+
+Result: passed through terminal fallback.
+
+Checks:
+
+```text
+py_compile: passed
+class: OkxSolIntradayCrashReboundV1Strategy
+timeframe: 15m
+can_short: False
+short_condition: pd.Series(False, index=dataframe.index)
+```
+
+System gap recorded because MCP v1 lacks a dedicated static validation tool:
+
+```text
+ai_runtime/mcp/system_gaps/20260527-110601_mcp_lacks_static_validation_tool_after_materialize.json
+```
+
+### Step 7: Data Ensure
+
+Tool:
+
+```text
+ensure_data(wait=true)
+```
+
+Web job:
+
+```text
+job_id: 77
+job_type: data_ensure
+status: success
+timerange: 20250101-20260527
+```
+
+Files:
+
+```text
+execution/freqtrade/user_data/data/okx/futures/SOL_USDT_USDT-15m-futures.feather
+execution/freqtrade/user_data/data/okx/futures/SOL_USDT_USDT-1h-funding_rate.feather
+execution/freqtrade/user_data/data/okx/futures/SOL_USDT_USDT-1h-mark.feather
+```
+
+### Step 8: Backtest And Validation
+
+Backtest tool:
+
+```text
+run_backtest(wait=true)
+```
+
+Backtest job:
+
+```text
+job_id: 78
+job_type: backtest
+status: success
+phase: validation
+timerange: 20251001-20251130
+```
+
+Backtest metrics:
+
+```text
+total_trades: 5
+wins: 3
+losses: 2
+winrate: 0.6
+profit_total: -0.005938759419999999
+profit_factor: 0.56865988156209
+avg_profit: -0.004762539148633849
+max_drawdown_account: 0.011557961409999961
+```
+
+Validation tool:
+
+```text
+run_validation_gate(wait=true)
+```
+
+Validation job:
+
+```text
+job_id: 79
+job_type: validation
+status: success
+passed: false
+```
+
+Failed checks:
+
+```text
+profit_total=-0.005939 < min_profit=0.000000
+profit_factor=0.5687 < min_profit_factor=1.0000
+avg_profit=-0.004763 < min_avg_profit=0.000000
+```
+
+Result directories:
+
+```text
+execution/freqtrade/user_data/backtest_results/web_jobs/job_78
+execution/freqtrade/user_data/backtest_results/web_jobs/job_79
+```
+
+### Step 9: Lifecycle Decision
+
+Decision: do not promote.
+
+Reason: validation gate failed. The strategy has enough trades to evaluate the configured gate threshold, but the expectancy is negative and profit factor is below 1.
+
+### Step 10: System-Gap Review
+
+System gaps recorded:
+
+```text
+ai_runtime/mcp/system_gaps/20260527-110601_mcp_lacks_static_validation_tool_after_materialize.json
+ai_runtime/mcp/system_gaps/20260527-110747_mcp_localhost_web_api_calls_require_sandbox_escalation_in_co.json
+```
+
+Findings:
+
+- MCP worked for Step 1, Step 2/3, Step 4, Step 5, Step 7, and Step 8.
+- Step 6 still needs terminal fallback; add MCP/Web API static validation.
+- In Codex sandbox, local Web API calls may need escalation; add preflight connectivity reporting.
+- Strategy result failure is strategy-level, not ai-runtime failure.

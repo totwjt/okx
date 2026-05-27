@@ -73,6 +73,13 @@ class MaterializeStrategyRequest(WaitOptions):
     timeout_wait_seconds: int = Field(default=900, gt=0)
 
 
+class StaticValidateStrategyRequest(BaseModel):
+    strategy_slug: str = Field(min_length=1)
+    expected_timeframe: str | None = None
+    expected_can_short: bool | None = None
+    runtime_dir: str | None = None
+
+
 class RunBacktestRequest(WaitOptions):
     strategy_slug: str = Field(min_length=1)
     profile_name: str | None = None

@@ -13,6 +13,7 @@ from app.services.lifecycle_service import (
     strategy_lifecycle,
     update_profile_thesis,
 )
+from app.services.lifecycle_reset_service import reset_all_strategies
 from app.services.paper_run_service import create_paper_run, current_paper_run, review_paper_run
 from app.services.runtime_alignment_service import runtime_alignment
 
@@ -53,6 +54,14 @@ class AdvanceRequest(BaseModel):
 @router.get("/strategies")
 def strategies() -> dict:
     return {"items": lifecycle_strategies()}
+
+
+@router.delete("/strategies")
+def reset_strategies() -> dict:
+    try:
+        return reset_all_strategies()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{strategy_slug}")

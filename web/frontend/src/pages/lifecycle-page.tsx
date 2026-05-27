@@ -17,12 +17,14 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { api, type LifecycleStep, type StrategyProfile } from '../api';
 import { ErrorState, LoadingState } from '../components/query-state';
 import { Metric } from '../components/metric';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../components/ui/sheet';
 import { StatusBadge } from '../components/ui/status-badge';
 import type { AppShellOutletContext } from '../components/app-shell';
@@ -413,6 +415,7 @@ export function LifecyclePage() {
   const [operationResults, setOperationResults] = useState<Record<string, StepOperationResult>>({});
   const [profileEditDraft, setProfileEditDraft] = useState<Record<string, string>>({});
   const [activeSheet, setActiveSheet] = useState<LifecycleSheet>(null);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const strategiesQuery = useQuery({ queryKey: ['lifecycle-strategies'], queryFn: api.lifecycleStrategies });
   const strategyQuery = useQuery({
@@ -609,6 +612,35 @@ export function LifecyclePage() {
     },
     onError: (error) => setStepError('profile', '参数档案保存失败', error),
   });
+  const resetStrategiesMutation = useMutation({
+    mutationFn: api.resetLifecycleStrategies,
+    onSuccess: (data) => {
+      setStrategySlug('');
+      setProfileName('');
+      setActiveSheet(null);
+      setResetDialogOpen(false);
+      setOperationResults({
+        reset: {
+          status: 'success',
+          title: '策略已全部删除',
+          detail: `清理 ${Object.values(data.table_counts).reduce((sum, count) => sum + count, 0)} 条记录，删除 ${data.deleted_artifact_paths.length} 个产物；服务暂停${data.service_pause.ok ? '成功' : data.service_pause.skipped ? '已跳过' : '失败'}`,
+        },
+      });
+      queryClient.setQueryData(['lifecycle-strategies'], []);
+      queryClient.setQueryData(['strategies'], []);
+      queryClient.removeQueries({ queryKey: ['lifecycle-strategy'] });
+      queryClient.removeQueries({ queryKey: ['lifecycle-profile'] });
+      queryClient.removeQueries({ queryKey: ['strategy'] });
+      queryClient.removeQueries({ queryKey: ['strategy-profiles'] });
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtime-artifacts'] });
+      void queryClient.invalidateQueries({ queryKey: ['backtest-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['validation-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['paper-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['risk-summary'] });
+    },
+    onError: (error) => setStepError('reset', '一键删除全部策略失败', error),
+  });
 
   const actionsForStep = (step: LifecycleStep): StepAction[] => {
     const isCurrent = step.key === detail?.summary.current_step_key;
@@ -790,6 +822,15 @@ export function LifecyclePage() {
             <Plus className="h-4 w-4" />
             新增策略
           </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={resetStrategiesMutation.isPending || (strategiesQuery.data?.length ?? 0) === 0}
+            onClick={() => setResetDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            一键删除全部策略
+          </Button>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
           <Metric label="当前档案" value={profileName || '-'} />
@@ -799,7 +840,7 @@ export function LifecyclePage() {
         </div>
       </div>
     ),
-    [detail, profileName, strategiesQuery.data, strategySlug],
+    [detail, profileName, resetStrategiesMutation.isPending, strategiesQuery.data, strategySlug],
   );
 
   useEffect(() => {
@@ -816,7 +857,16 @@ export function LifecyclePage() {
 
   return (
     <div className="grid gap-4 2xl:pr-52">
-      {!detail ? <LoadingState /> : (
+      {!detail && (strategiesQuery.data?.length ?? 0) === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>暂无策略</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            当前 registry 已清空，可以从右上角新增策略重新开始流程。
+          </CardContent>
+        </Card>
+      ) : !detail ? <LoadingState /> : (
         <>
           <StepFloatingNav steps={detail.steps} currentStepKey={detail.summary.current_step_key} />
 
@@ -859,6 +909,30 @@ export function LifecyclePage() {
           </div>
         </>
       )}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除全部策略</DialogTitle>
+            <DialogDescription>
+              这会清空策略注册表、定义、档案、验证和任务记录，删除 runtime 与 Web 回测产物，并暂停 freqtrade 服务。源码 YAML 不会被删除。
+            </DialogDescription>
+          </DialogHeader>
+          {operationResults.reset?.status === 'error' ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {operationResults.reset.detail}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="ghost" disabled={resetStrategiesMutation.isPending} onClick={() => setResetDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="danger" disabled={resetStrategiesMutation.isPending} onClick={() => resetStrategiesMutation.mutate()}>
+              <Trash2 className="h-4 w-4" />
+              {resetStrategiesMutation.isPending ? '删除中' : '确认删除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={activeSheet !== null} onOpenChange={(open) => { if (!open) setActiveSheet(null); }}>
         <SheetContent>

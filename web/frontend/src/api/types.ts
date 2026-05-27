@@ -24,6 +24,20 @@ export interface StrategyDraftPayload {
   thesis: Record<string, string>;
 }
 
+export interface StrategyResetResult {
+  reset: boolean;
+  table_counts: Record<string, number>;
+  deleted_artifact_paths: string[];
+  service_pause: {
+    ok: boolean;
+    skipped: boolean;
+    reason?: string;
+    returncode?: number;
+    stdout?: string;
+    stderr?: string;
+  };
+}
+
 export interface ProfileDraftPayload {
   profile_name: string;
   source_profile?: string | null;

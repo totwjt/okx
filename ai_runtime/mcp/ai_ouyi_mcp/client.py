@@ -26,10 +26,41 @@ class WebApiError(RuntimeError):
 
 class AiOuyiWebClient:
     def __init__(self, base_url: str | None = None, timeout_seconds: int = 30) -> None:
+        self.base_url_source = "argument" if base_url else "AI_OUYI_WEB_BASE_URL" if os.getenv("AI_OUYI_WEB_BASE_URL") else "default"
         self.base_url = (base_url or os.getenv("AI_OUYI_WEB_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.session = requests.Session()
         self.session.trust_env = False
+
+    def preflight_web_api(self) -> ToolResult:
+        checks = [
+            self._probe_endpoint("GET", "/api/health"),
+            self._probe_endpoint("GET", "/api/strategies"),
+        ]
+        healthy = all(check.get("ok") for check in checks)
+        data = {
+            "base_url": self.base_url,
+            "base_url_source": self.base_url_source,
+            "timeout_seconds": self.timeout_seconds,
+            "checks": checks,
+            "healthy": healthy,
+        }
+        if healthy:
+            return ToolResult(
+                ok=True,
+                data=data,
+                sop_step=SopStep(advances=False, note="Web API preflight passed. Step 1 may proceed if the strategy hypothesis is ready."),
+            )
+        return ToolResult(
+            ok=False,
+            data=data,
+            error=ToolError(
+                type="web_api_preflight_failed",
+                message=f"Web API preflight failed for {self.base_url}; configure AI_OUYI_WEB_BASE_URL or start the Web API.",
+                detail=data,
+            ),
+            sop_step=SopStep(advances=False, note="Web API preflight failed; do not advance SOP Step."),
+        )
 
     def create_strategy_hypothesis(self, payload: BaseModel) -> ToolResult:
         return self._wrap(
@@ -178,7 +209,16 @@ class AiOuyiWebClient:
         try:
             response = self.session.request(method, url, json=json_body, timeout=self.timeout_seconds)
         except requests.RequestException as exc:
-            raise WebApiError(f"Web API request failed: {exc}", detail={"url": url, "method": method}) from exc
+            raise WebApiError(
+                f"Web API request failed: {exc}",
+                detail={
+                    "url": url,
+                    "method": method,
+                    "base_url": self.base_url,
+                    "base_url_source": self.base_url_source,
+                    "env_var": "AI_OUYI_WEB_BASE_URL",
+                },
+            ) from exc
         if response.status_code >= 400:
             detail = self._response_detail(response)
             raise WebApiError(
@@ -187,6 +227,28 @@ class AiOuyiWebClient:
                 detail=detail,
             )
         return self._response_detail(response)
+
+    def _probe_endpoint(self, method: str, path: str) -> dict[str, Any]:
+        url = f"{self.base_url}{path}"
+        try:
+            response = self.session.request(method, url, timeout=self.timeout_seconds)
+        except requests.RequestException as exc:
+            return {
+                "ok": False,
+                "method": method,
+                "path": path,
+                "url": url,
+                "error": str(exc),
+            }
+        detail = self._response_detail(response)
+        return {
+            "ok": response.status_code < 400,
+            "method": method,
+            "path": path,
+            "url": url,
+            "status_code": response.status_code,
+            "detail": detail,
+        }
 
     def _wait_for_job(self, job_id: int, poll_interval_seconds: float, timeout_wait_seconds: int) -> dict[str, Any]:
         deadline = time.monotonic() + timeout_wait_seconds

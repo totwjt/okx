@@ -1,4 +1,4 @@
-import { apiJson, postJson, putJson } from './client';
+import { apiJson, deleteJson, postJson, putJson } from './client';
 import type {
   BacktestPayload,
   FactorsHealth,
@@ -10,6 +10,7 @@ import type {
   ProfileOverridesPayload,
   RiskSummary,
   RuntimeArtifact,
+  StrategyResetResult,
   StrategyDraftPayload,
   StrategyDetail,
   StrategyProfile,
@@ -62,6 +63,7 @@ export const api = {
     }),
   lifecycleStrategies: async () =>
     (await apiJson<{ items: StrategySummary[] }>('/api/lifecycle/strategies')).items,
+  resetLifecycleStrategies: () => deleteJson<StrategyResetResult>('/api/lifecycle/strategies'),
   lifecycleStrategy: (slug: string) => apiJson<LifecycleStrategyDetail>(`/api/lifecycle/${slug}`),
   lifecycleProfile: (strategySlug: string, profileName: string) =>
     apiJson<LifecycleProfileDetail>(

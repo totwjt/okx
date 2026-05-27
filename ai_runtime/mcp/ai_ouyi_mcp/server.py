@@ -22,12 +22,18 @@ from .schemas import (
 mcp = FastMCP("ai-ouyi-strategy-research")
 
 
-def _client() -> AiOuyiWebClient:
-    return AiOuyiWebClient()
+def _client(base_url: str | None = None) -> AiOuyiWebClient:
+    return AiOuyiWebClient(base_url=base_url)
 
 
 def _dump(result: ToolResult) -> dict[str, Any]:
     return result.model_dump(exclude_none=True)
+
+
+@mcp.tool()
+def preflight_web_api(base_url: str | None = None) -> dict[str, Any]:
+    """Verify the configured Web API before running SOP Step 1 or job tools."""
+    return _dump(_client(base_url=base_url).preflight_web_api())
 
 
 @mcp.tool()

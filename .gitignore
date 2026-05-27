@@ -37,6 +37,7 @@ output/
 data/
 ft_userdata/
 freqtrade_env/
+ai_runtime/mcp/system_gaps/
 
 # Strategy runtime/generated artifacts
 strategies/generated/*

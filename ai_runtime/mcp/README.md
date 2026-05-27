@@ -12,7 +12,60 @@ Override:
 export AI_OUYI_WEB_BASE_URL=http://127.0.0.1:8123
 ```
 
+Before Step 1, run `preflight_web_api`. It verifies the configured base URL against:
+
+```text
+GET /api/health
+GET /api/strategies
+```
+
+If Codex/MCP runs in a sandbox where `127.0.0.1` points somewhere else or local sockets are blocked, set `AI_OUYI_WEB_BASE_URL` to the reachable Web API address and rerun preflight. Do not advance SOP Step 1 until preflight passes.
+
 ## Tool Specs
+
+### preflight_web_api
+
+Step: pre-SOP connectivity check.
+
+Input schema:
+
+```json
+{
+  "base_url": "string, optional"
+}
+```
+
+Web API endpoints:
+
+```text
+GET /api/health
+GET /api/strategies
+```
+
+Expected output:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "base_url": "http://127.0.0.1:8123",
+    "base_url_source": "default | AI_OUYI_WEB_BASE_URL | argument",
+    "healthy": true,
+    "checks": [
+      {"path": "/api/health", "ok": true, "status_code": 200},
+      {"path": "/api/strategies", "ok": true, "status_code": 200}
+    ]
+  },
+  "sop_step": {"advances": false}
+}
+```
+
+Failure behavior:
+
+- Return `ok=false` with the configured base URL, source, endpoint checks, and connection or HTTP error details.
+- Do not create strategy records, files, jobs, or database rows.
+
+Advances SOP Step: no. It only proves the Web API is reachable before Step 1.
 
 ### create_strategy_hypothesis
 

@@ -27,6 +27,32 @@ RUNTIME_PARAM_DIR = resolve_project_path(
     "execution/freqtrade/user_data/runtime_params",
 )
 
+FREQTRADE_FACTOR_PARAMS: tuple[tuple[str, str, str, str], ...] = (
+    ("ma", "period", "ma_period", "buy"),
+    ("rsi", "period", "rsi_period", "buy"),
+    ("rsi_oversold", "value", "rsi_oversold", "buy"),
+    ("rsi_overbought", "value", "rsi_overbought", "sell"),
+    ("bb", "period", "bb_period", "buy"),
+    ("bb", "std", "bb_std", "buy"),
+    ("bb", "width_trend_min", "bb_width_trend_min", "buy"),
+    ("bb", "width_range_max", "bb_width_range_max", "buy"),
+    ("volume", "ma_period", "volume_ma_period", "buy"),
+    ("volume", "ratio_threshold", "volume_ratio_threshold", "buy"),
+    ("macd", "fast", "macd_fast", "buy"),
+    ("macd", "slow", "macd_slow", "buy"),
+    ("macd", "signal", "macd_signal", "buy"),
+    ("adx", "period", "adx_period", "buy"),
+    ("adx", "trend_min", "adx_trend_min", "buy"),
+    ("adx", "range_max", "adx_range_max", "buy"),
+    ("atr", "period", "atr_period", "buy"),
+    ("atr", "entry_max", "atr_entry_max", "buy"),
+    ("atr", "exit_max", "atr_exit_max", "sell"),
+    ("zscore", "period", "zscore_period", "buy"),
+    ("zscore", "entry_abs", "zscore_entry_abs", "buy"),
+    ("zscore", "exit_abs", "zscore_exit_abs", "sell"),
+    ("donchian", "period", "donchian_period", "buy"),
+)
+
 
 def strategy_class_name(name: str) -> str:
     return "".join(word.capitalize() for word in name.replace("-", " ").replace("_", " ").split()) + "Strategy"
@@ -49,14 +75,11 @@ def build_freqtrade_params(name: str, spec: dict, profile_name: str | None = Non
     }
     if spec.get("trailing_only_offset_is_reached") is not None:
         params["trailing"]["trailing_only_offset_is_reached"] = spec["trailing_only_offset_is_reached"]
-    if factors.get("ma", {}).get("enabled"):
-        params["buy"]["ma_period"] = factors["ma"].get("period")
-    if factors.get("rsi", {}).get("enabled"):
-        params["buy"]["rsi_period"] = factors["rsi"].get("period")
-    if factors.get("rsi_oversold", {}).get("enabled"):
-        params["buy"]["rsi_oversold"] = factors["rsi_oversold"].get("value")
-    if factors.get("rsi_overbought", {}).get("enabled"):
-        params["sell"]["rsi_overbought"] = factors["rsi_overbought"].get("value")
+    for factor_name, factor_field, param_name, space in FREQTRADE_FACTOR_PARAMS:
+        factor = factors.get(factor_name, {})
+        if not factor.get("enabled") or factor_field not in factor:
+            continue
+        params[space][param_name] = factor[factor_field]
     return {
         "strategy_name": strategy_class_name(name),
         "profile_name": profile_name,
